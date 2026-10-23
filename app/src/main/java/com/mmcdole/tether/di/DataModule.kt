@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStoreFile
 import androidx.room.Room
+import com.mmcdole.tether.data.db.RuleDao
 import com.mmcdole.tether.data.db.TetherDatabase
 import com.mmcdole.tether.data.db.WorldDao
 import com.mmcdole.tether.data.session.AndroidNetworkMonitor
@@ -33,6 +34,9 @@ object DataModule {
 
     @Provides
     fun provideWorldDao(database: TetherDatabase): WorldDao = database.worldDao()
+
+    @Provides
+    fun provideRuleDao(database: TetherDatabase): RuleDao = database.ruleDao()
 
     @Provides
     @Singleton

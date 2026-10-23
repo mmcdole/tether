@@ -1,0 +1,67 @@
+package com.mmcdole.tether.data.rules
+
+import com.mmcdole.tether.data.db.RuleEntity
+import com.mmcdole.tether.data.db.RuleKind
+import com.mmcdole.tether.mud.rules.Alias
+import com.mmcdole.tether.mud.rules.Scope
+import com.mmcdole.tether.mud.rules.Trigger
+
+internal val Scope.worldId: Long? get() = (this as? Scope.World)?.worldId
+
+internal fun scopeOf(worldId: Long?): Scope = if (worldId == null) Scope.Global else Scope.World(worldId)
+
+internal fun RuleEntity.toTrigger() = Trigger(
+    id = id,
+    scope = scopeOf(worldId),
+    pattern = pattern,
+    isRegex = isRegex,
+    enabled = enabled,
+    group = group,
+    priority = priority,
+    highlight = highlight,
+    gag = gag,
+    send = body,
+    vibrate = vibrate,
+    notify = notify,
+    replyTemplate = replyTemplate,
+    replyRequiresUnlock = replyRequiresUnlock,
+)
+
+internal fun RuleEntity.toAlias() = Alias(
+    id = id,
+    scope = scopeOf(worldId),
+    name = pattern,
+    expansion = body.orEmpty(),
+    enabled = enabled,
+    group = group,
+)
+
+internal fun Trigger.toEntity(createdAt: Long) = RuleEntity(
+    id = id,
+    worldId = scope.worldId,
+    kind = RuleKind.Trigger,
+    pattern = pattern,
+    body = send,
+    isRegex = isRegex,
+    enabled = enabled,
+    group = group,
+    priority = priority,
+    highlight = highlight,
+    gag = gag,
+    vibrate = vibrate,
+    notify = notify,
+    replyTemplate = replyTemplate,
+    replyRequiresUnlock = replyRequiresUnlock,
+    createdAt = createdAt,
+)
+
+internal fun Alias.toEntity(createdAt: Long) = RuleEntity(
+    id = id,
+    worldId = scope.worldId,
+    kind = RuleKind.Alias,
+    pattern = name,
+    body = expansion,
+    enabled = enabled,
+    group = group,
+    createdAt = createdAt,
+)
