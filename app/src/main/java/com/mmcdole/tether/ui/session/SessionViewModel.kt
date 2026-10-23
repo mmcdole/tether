@@ -102,8 +102,12 @@ class SessionViewModel @Inject constructor(
 
     /** The session is on screen, so its world's message notifications have been seen. */
     fun shown() {
-        session.world.value?.let { alerts.clearNotifications(it.id) }
+        val id = session.world.value?.id ?: return
+        alerts.clearNotifications(id)
+        alerts.setOnScreen(id)
     }
+
+    fun hidden() = alerts.setOnScreen(null)
 
     fun reconnect() = session.reconnect()
 

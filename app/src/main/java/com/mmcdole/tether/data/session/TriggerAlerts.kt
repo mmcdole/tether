@@ -11,4 +11,10 @@ interface TriggerAlerts {
 
     /** Clears [worldId]'s message notifications, as when its session is opened. */
     fun clearNotifications(worldId: Long)
+
+    /**
+     * The world whose session is on screen, or null. Like a messaging app with that chat
+     * open, its trigger notifications are not posted while it is visible.
+     */
+    fun setOnScreen(worldId: Long?)
 }

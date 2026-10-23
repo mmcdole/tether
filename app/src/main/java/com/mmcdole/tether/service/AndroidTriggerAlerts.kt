@@ -40,7 +40,15 @@ class AndroidTriggerAlerts @Inject constructor(
         }
     }
 
-    override fun notify(world: World, request: NotifyRequest) = notifications.received(world, request)
+    @Volatile private var onScreen: Long? = null
+
+    override fun notify(world: World, request: NotifyRequest) {
+        if (world.id != onScreen) notifications.received(world, request)
+    }
+
+    override fun setOnScreen(worldId: Long?) {
+        onScreen = worldId
+    }
 
     override fun clearNotifications(worldId: Long) = notifications.clearWorld(worldId)
 

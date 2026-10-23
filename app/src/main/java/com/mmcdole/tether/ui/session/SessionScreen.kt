@@ -86,7 +86,7 @@ fun SessionScreen(
     val hideStatusBar = settings?.hideStatusBar == true
     LifecycleResumeEffect(state.worldId) {
         viewModel.shown()
-        onPauseOrDispose {}
+        onPauseOrDispose { viewModel.hidden() }
     }
     HideStatusBar(hideStatusBar)
     // safeDrawing includes the keyboard, so the output shrinks to sit above it. With the

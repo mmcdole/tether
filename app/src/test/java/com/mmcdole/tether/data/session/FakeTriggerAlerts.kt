@@ -22,4 +22,10 @@ class FakeTriggerAlerts : TriggerAlerts {
     override fun clearNotifications(worldId: Long) {
         cleared += worldId
     }
+
+    var shownWorld: Long? = null
+
+    override fun setOnScreen(worldId: Long?) {
+        shownWorld = worldId
+    }
 }
