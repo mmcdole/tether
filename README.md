@@ -1,52 +1,42 @@
 # Tether
 
-A MUD client for Android. Black screen, colored text, one-line input, and a connection that
-stays up with the screen off. Aliases and triggers per world or global, gags, and lock-screen
-notify and reply.
+A MUD client for Android.
 
-## Build and install
+- Stays connected with the screen off
+- Full ANSI color, black background
+- One-line input that leaves your keyboard alone
+- Aliases, triggers and gags, global or per world
+- Notify and reply to tells from the lock screen
+
+## Install
+
+1. On your phone, open the [latest release](https://github.com/mmcdole/tether/releases/latest) and download the `.apk`.
+2. Open it. If asked, allow your browser or Files app to install unknown apps.
+3. Open Tether, tap **+**, and add your MUD's host and port.
+4. On first connect, allow notifications and "Keep Tether connected?" so it stays connected with the screen off.
+
+Updates install over the old version and keep your worlds and rules.
+
+## Commands
+
+Type these in the input line:
+
+```
+#alias {k} {kill %1}        alias for this world (#galias for all worlds)
+#action {%1 tells you: %2} {say hi %1}
+#gag {The fountain gurgles.}
+#unalias k   #unaction {...}   #ungag {...}
+look;say hi                 ; separates commands
+```
+
+Long-press output to select and copy. Pinch to change text size.
+
+## Build
 
 Needs JDK 21 and the Android SDK.
 
 ```
-./gradlew check                 # lint and unit tests
-./gradlew :app:assembleDebug    # app/build/outputs/apk/debug/app-debug.apk
-./gradlew :app:assembleRelease  # app/build/outputs/apk/release/app-release.apk (R8-minified)
-adb install -r <apk>
+./gradlew check assembleRelease
 ```
 
-### Release signing
-
-If `keystore.properties` exists at the repo root, release builds are signed with it:
-
-```
-storeFile=release.jks
-storePassword=...
-keyAlias=...
-keyPassword=...
-```
-
-`storeFile` is relative to the repo root. Without the file, release builds are signed with the
-debug key, which is fine for sideloading but not for publishing. Switching keys means
-uninstalling first. `keystore.properties`, `*.jks` and `*.keystore` are gitignored.
-
-## Test MUD
-
-`tools/testmud.py` is a tiny MUD for trying the client by hand (Python 3, stdlib only):
-
-```
-python3 tools/testmud.py [--port 4000] [--mccp] [--password secret] [--chatter 5]
-```
-
-- `--port`: port to listen on (default 4000)
-- `--mccp`: offer MCCP2 compression
-- `--password`: require this password (otherwise any works)
-- `--chatter`: seconds between background chatter lines (default 5)
-
-From the emulator, the host machine is `10.0.2.2`. Commands: `look`, `say <text>`,
-`flood <n>`, `quit` (closes cleanly), `reset` (closes with a TCP reset).
-
-## Docs
-
-- `docs/design.html`: screens and behavior
-- `docs/build-plan.html`: architecture, build phases and coverage
+Release builds are signed with `keystore.properties` (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`) if present, otherwise the debug key. `tools/testmud.py` is a small local MUD for testing.
