@@ -59,7 +59,6 @@ class RuleFormsTest {
         assertTrue(form.copy(highlight = HighlightColor.Cyan.rgb).canSave)
         assertTrue(form.copy(vibrate = true).canSave)
         assertTrue(form.copy(notify = true).canSave)
-        assertFalse(form.copy(gag = true, priority = "-").canSave)
     }
 
     @Test
@@ -89,14 +88,5 @@ class RuleFormsTest {
         assertFalse(form.canSave)
         assertTrue(form.copy(scope = Scope.Global).canSave)
         assertFalse(form.copy(scope = Scope.Global, expansion = " ").canSave)
-    }
-
-    @Test
-    fun priorityInput() {
-        assertTrue("".isPriorityInput())
-        assertTrue("-".isPriorityInput())
-        assertTrue("-12".isPriorityInput())
-        assertFalse("1a".isPriorityInput())
-        assertFalse("12345678".isPriorityInput())
     }
 }

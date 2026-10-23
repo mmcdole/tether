@@ -35,7 +35,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mmcdole.tether.mud.rules.Scope
@@ -121,14 +120,6 @@ private fun TriggerFields(form: TriggerForm, world: WorldOption?, viewModel: Rul
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             SheetField("Send command", form.send, { v -> update { it.copy(send = v) } }, placeholder = "kill %1")
             SwitchRow("Regex", form.isRegex) { v -> update { it.copy(isRegex = v) } }
-            SheetField(
-                "Priority",
-                form.priority,
-                { v -> update { it.copy(priority = v) } },
-                accept = { v -> v.takeIf { it.isPriorityInput() } },
-                placeholder = "0",
-                keyboardType = KeyboardType.Number,
-            )
             if (form.notify) {
                 SheetField("Reply template", form.replyTemplate, { v -> update { it.copy(replyTemplate = v) } }, placeholder = "tell %1")
                 SwitchRow("Require unlock", form.replyRequiresUnlock) { v -> update { it.copy(replyRequiresUnlock = v) } }

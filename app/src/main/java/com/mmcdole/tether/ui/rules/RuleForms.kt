@@ -70,8 +70,9 @@ data class TriggerForm(
     val vibrate: Boolean = false,
     val notify: Boolean = false,
     val send: String = "",
+    // Not editable yet; carried through so saving keeps the stored values.
     val group: String = "",
-    val priority: String = "",
+    val priority: Int = 0,
     val replyTemplate: String = "",
     val replyRequiresUnlock: Boolean = true,
     val enabled: Boolean = true,
@@ -80,8 +81,7 @@ data class TriggerForm(
     val isNew get() = id == 0L
     val patternError get() = patternError(pattern, isRegex)
     private val doesSomething get() = highlight != null || gag || vibrate || notify || send.isNotBlank()
-    private val priorityValid get() = priority.isEmpty() || priority.toIntOrNull() != null
-    val canSave get() = pattern.isNotEmpty() && patternError == null && doesSomething && priorityValid
+    val canSave get() = pattern.isNotEmpty() && patternError == null && doesSomething
 
     fun toTrigger() = Trigger(
         id = id,
@@ -90,7 +90,7 @@ data class TriggerForm(
         isRegex = isRegex,
         enabled = enabled,
         group = group.trim().ifEmpty { null },
-        priority = priority.toIntOrNull() ?: 0,
+        priority = priority,
         highlight = highlight,
         gag = gag,
         send = send.trim().ifEmpty { null },
@@ -112,12 +112,12 @@ data class TriggerForm(
             notify = t.notify,
             send = t.send.orEmpty(),
             group = t.group.orEmpty(),
-            priority = if (t.priority == 0) "" else t.priority.toString(),
+            priority = t.priority,
             replyTemplate = t.replyTemplate.orEmpty(),
             replyRequiresUnlock = t.replyRequiresUnlock,
             enabled = t.enabled,
             // Open Advanced when something in it is set, so nothing is hidden while editing.
-            advanced = t.isRegex || !t.send.isNullOrBlank() || t.group != null || t.priority != 0 ||
+            advanced = t.isRegex || !t.send.isNullOrBlank() ||
                 t.replyTemplate != null || !t.replyRequiresUnlock,
         )
     }
@@ -144,6 +144,3 @@ data class AliasForm(
             AliasForm(a.id, a.scope, a.name, a.expansion, a.group.orEmpty(), a.enabled, taken)
     }
 }
-
-/** Priority accepts an optional leading minus and digits. */
-internal fun String.isPriorityInput() = isEmpty() || this == "-" || (length <= 6 && toIntOrNull() != null)
