@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -54,14 +55,17 @@ import com.mmcdole.tether.ui.theme.TetherColors
 import kotlin.math.abs
 
 /**
- * The command line: one line tall, scrolls sideways, keeps focus after Send. A vertical
- * swipe steps through [history]. While [password] is set it masks input and remembers nothing.
+ * The command line: one line tall, scrolls sideways, keeps focus after Send unless
+ * [keepKeyboardOpen] is off. A vertical swipe steps through [history]. While [password]
+ * is set it masks input and remembers nothing.
  */
 @Composable
 fun CommandInput(
     password: Boolean,
     history: List<String>,
     onSend: (String) -> Unit,
+    autocorrect: Boolean,
+    keepKeyboardOpen: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val command = rememberTextFieldState()
@@ -85,10 +89,13 @@ fun CommandInput(
         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
     }
 
+    val focusManager = LocalFocusManager.current
+
     fun send(state: TextFieldState) {
         onSend(state.text.toString())
         state.clearText()
         recalled = -1
+        if (!keepKeyboardOpen) focusManager.clearFocus()
     }
 
     // Swapping between the plain and secure field would drop focus and close the keyboard.
@@ -124,12 +131,12 @@ fun CommandInput(
                 lineLimits = TextFieldLineLimits.SingleLine,
                 scrollState = scroll,
                 keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.None,
-                    autoCorrectEnabled = false,
+                    capitalization = if (autocorrect) KeyboardCapitalization.Sentences else KeyboardCapitalization.None,
+                    autoCorrectEnabled = autocorrect,
                     keyboardType = KeyboardType.Text,
                     imeAction = ImeAction.Send,
                 ),
-                // Not calling the default action keeps focus, so the keyboard stays open.
+                // Not calling the default action keeps focus, so the keyboard stays open unless send() drops it.
                 onKeyboardAction = { send(command) },
                 decorator = decorator(command, "Send a command"),
             )

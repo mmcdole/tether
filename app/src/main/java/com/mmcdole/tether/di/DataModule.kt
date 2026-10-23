@@ -12,8 +12,8 @@ import com.mmcdole.tether.data.session.AndroidNetworkMonitor
 import com.mmcdole.tether.data.session.MudSocketFactory
 import com.mmcdole.tether.data.session.NetworkMonitor
 import com.mmcdole.tether.data.session.TcpSocketFactory
-import com.mmcdole.tether.data.settings.DefaultSessionOptions
 import com.mmcdole.tether.data.settings.SessionOptionsSource
+import com.mmcdole.tether.data.settings.StoredSessionOptions
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -47,5 +47,5 @@ object DataModule {
 
     @Provides
     @Singleton
-    fun provideSessionOptions(defaults: DefaultSessionOptions): SessionOptionsSource = defaults
+    fun provideSessionOptions(stored: StoredSessionOptions): SessionOptionsSource = stored
 }

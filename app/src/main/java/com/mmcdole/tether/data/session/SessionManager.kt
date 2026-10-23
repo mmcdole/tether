@@ -28,6 +28,8 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -68,7 +70,7 @@ class SessionManager @Inject constructor(
     /** Commands typed this session, oldest first. Passwords are never kept. */
     val history: StateFlow<List<String>> = _history.asStateFlow()
 
-    private val lines = Scrollback()
+    private val lines = Scrollback(options.options.value.scrollbackLines)
     private var partial = LineContent.Empty
     private var connection: MudConnection? = null
     private var job: Job? = null
@@ -82,6 +84,12 @@ class SessionManager @Inject constructor(
 
     init {
         scope.launch(session) { network.events.collect(::onNetwork) }
+        scope.launch(session) {
+            options.options.map { it.scrollbackLines }.distinctUntilChanged().collect {
+                lines.capacity = it
+                publish()
+            }
+        }
     }
 
     fun connect(world: World) = onSession {

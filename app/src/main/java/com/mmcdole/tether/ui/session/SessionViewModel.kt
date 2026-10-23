@@ -4,17 +4,21 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mmcdole.tether.data.session.SessionManager
 import com.mmcdole.tether.data.session.SessionState
+import com.mmcdole.tether.data.settings.AppSettings
+import com.mmcdole.tether.data.settings.SettingsRepository
 import com.mmcdole.tether.di.DefaultDispatcher
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.Instant
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 enum class ConnectionStatus { Idle, Connecting, Reconnecting, Connected }
 
@@ -31,6 +35,7 @@ data class SessionUiState(
 @HiltViewModel
 class SessionViewModel @Inject constructor(
     private val session: SessionManager,
+    private val settingsRepository: SettingsRepository,
     @DefaultDispatcher default: CoroutineDispatcher,
 ) : ViewModel() {
     private var rendered = emptyList<OutputLine>()
@@ -54,10 +59,27 @@ class SessionViewModel @Inject constructor(
         uiState(session.state.value, session.world.value?.name.orEmpty(), emptyList(), false, emptyList()),
     )
 
-    init {
-        // Phase 5 measures the real size; until then MUDs get the classic terminal.
-        session.setWindowSize(80, 24)
+    // The size while pinching, until it's saved.
+    private val pinchSize = MutableStateFlow<Int?>(null)
+
+    /** Null until loaded, so the output doesn't draw at the default size first. */
+    val settings: StateFlow<AppSettings?> = combine(settingsRepository.settings, pinchSize) { saved, pinch ->
+        if (pinch == null) saved else saved.copy(textSize = pinch)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun pinchTextSize(size: Int) {
+        pinchSize.value = size
     }
+
+    fun endPinch() {
+        val size = pinchSize.value ?: return
+        viewModelScope.launch {
+            settingsRepository.setTextSize(size)
+            pinchSize.value = null
+        }
+    }
+
+    fun setWindowSize(size: WindowSize) = session.setWindowSize(size.columns, size.rows)
 
     fun send(input: String) = session.send(input)
 

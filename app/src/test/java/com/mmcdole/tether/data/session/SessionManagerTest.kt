@@ -45,8 +45,9 @@ class SessionManagerTest {
         retryDelay: Duration = 20.milliseconds,
         options: SessionOptions = SessionOptions(),
         maxAttempts: Int = ReconnectPolicy.MAX_ATTEMPTS,
+        source: FixedSessionOptions = FixedSessionOptions(options),
     ) = SessionManager(
-        repository, factory, network, ReconnectPolicy(listOf(retryDelay), maxAttempts), FixedSessionOptions(options),
+        repository, factory, network, ReconnectPolicy(listOf(retryDelay), maxAttempts), source,
         scope, Dispatchers.IO, Dispatchers.Default, clock,
     )
 
@@ -190,6 +191,20 @@ class SessionManagerTest {
         assertEquals(SessionState.Idle, manager.state.value)
         delay(100)
         assertEquals(1, server.attempts)
+    }
+
+    @Test
+    fun scrollbackSizeChangesApplyToTheLiveSession() = runBlocking<Unit> {
+        val source = FixedSessionOptions(SessionOptions(scrollbackLines = 5))
+        val manager = manager(source = source).connected()
+        server.send((1..5).joinToString("") { "line $it\r\n" })
+        manager.awaitLines { it.size == 5 }
+
+        source.options.value = SessionOptions(scrollbackLines = 2)
+        manager.awaitTexts("line 4", "line 5")
+        source.options.value = SessionOptions(scrollbackLines = 3)
+        server.send("line 6\r\nline 7\r\n")
+        manager.awaitTexts("line 5", "line 6", "line 7")
     }
 
     @Test

@@ -12,3 +12,6 @@ data class WorldEditRoute(val id: Long? = null)
 /** The live session. There is only ever one, so it needs no arguments. */
 @Serializable
 data object SessionRoute
+
+@Serializable
+data object SettingsRoute

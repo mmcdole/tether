@@ -105,12 +105,12 @@ private fun needsNotificationPermission(context: Context): Boolean =
     Build.VERSION.SDK_INT >= 33 &&
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
 
-private fun ignoresBatteryOptimization(context: Context): Boolean =
+internal fun ignoresBatteryOptimization(context: Context): Boolean =
     context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName)
 
 // A persistent connection is this app's whole purpose, which is what this request is for.
 @SuppressLint("BatteryLife")
-private fun requestIgnoreBatteryOptimization(context: Context) {
+internal fun requestIgnoreBatteryOptimization(context: Context) {
     val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, "package:${context.packageName}".toUri())
     runCatching { context.startActivity(intent) }
 }

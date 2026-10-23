@@ -25,21 +25,27 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mmcdole.tether.mud.text.LineKind
@@ -47,6 +53,7 @@ import com.mmcdole.tether.mud.text.StyledLine
 import com.mmcdole.tether.ui.theme.AnsiColors
 import com.mmcdole.tether.ui.theme.MudFont
 import com.mmcdole.tether.ui.theme.TetherColors
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.mmcdole.tether.mud.ansi.TextStyle as AnsiStyle
 
@@ -92,22 +99,32 @@ private fun AnsiStyle.toSpanStyle(): SpanStyle {
     )
 }
 
-// No trimming, so wrapped rows and separate lines sit at the same pitch.
-private val LineStyle = TextStyle(
+/** Output text at [size] sp. No trimming, so wrapped rows and separate lines sit at the same pitch. */
+fun mudTextStyle(size: Int) = TextStyle(
     fontFamily = MudFont,
-    fontSize = 13.sp,
-    lineHeight = 18.sp,
+    fontSize = size.sp,
+    lineHeight = (size * LINE_SPACING).sp,
     lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
     color = TetherColors.Text,
 )
 
+private const val LINE_SPACING = 18f / 13f
+
 /**
  * The scrollback, newest at the bottom, selectable like any Android text. Follows new
  * output while at the bottom. Scrolling up or long-pressing pauses it; a chip counts
- * what arrived since.
+ * what arrived since. Pinching changes [textSize] through [onTextSize], and [onTextSizeEnd]
+ * comes when the fingers lift. [onWindowSize] gets the columns and rows that fit, once they settle.
  */
 @Composable
-fun OutputPane(lines: List<OutputLine>, modifier: Modifier = Modifier) {
+fun OutputPane(
+    lines: List<OutputLine>,
+    textSize: Int,
+    onTextSize: (Int) -> Unit,
+    onTextSizeEnd: () -> Unit,
+    onWindowSize: (WindowSize) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var following by remember { mutableStateOf(true) }
@@ -136,35 +153,76 @@ fun OutputPane(lines: List<OutputLine>, modifier: Modifier = Modifier) {
         }
     }
 
+    val style = remember(textSize) { mudTextStyle(textSize) }
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    var paneSize by remember { mutableStateOf(IntSize.Zero) }
+    val window = remember(paneSize, style, density) {
+        if (paneSize == IntSize.Zero) return@remember null
+        val (charWidth, lineHeight) = measurer.cellSize(style)
+        with(density) {
+            windowSize(
+                width = paneSize.width - 2 * PaneHorizontalPadding.toPx(),
+                height = paneSize.height - 2 * PaneVerticalPadding.toPx(),
+                charWidth = charWidth,
+                lineHeight = lineHeight,
+            )
+        }
+    }
+    val currentOnWindowSize by rememberUpdatedState(onWindowSize)
+    // Restarting on each change debounces pinching, rotation and the keyboard sliding in.
+    LaunchedEffect(window) {
+        if (window == null) return@LaunchedEffect
+        delay(WINDOW_SIZE_DEBOUNCE_MS)
+        currentOnWindowSize(window)
+    }
+    var pinching by remember { mutableStateOf(false) }
+    val currentTextSize by rememberUpdatedState(textSize)
+
     Box(
-        modifier.pointerInput(Unit) {
-            // Watches for a long-press without consuming anything, so selection still gets it.
-            awaitEachGesture {
-                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                val endedEarly = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
-                    while (true) {
-                        val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id }
-                        if (change == null || !change.pressed) break
-                        if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) break
+        modifier
+            .onSizeChanged { paneSize = it }
+            .textSizeGesture(
+                size = { currentTextSize },
+                onSize = {
+                    pinching = true
+                    onTextSize(it)
+                },
+                onEnd = {
+                    pinching = false
+                    onTextSizeEnd()
+                },
+            )
+            .pointerInput(Unit) {
+                // Watches for a long-press without consuming anything, so selection still gets it.
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    val endedEarly = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                        while (true) {
+                            val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id }
+                            if (change == null || !change.pressed) break
+                            if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) break
+                        }
+                        true
                     }
-                    true
+                    if (endedEarly == null) following = false
                 }
-                if (endedEarly == null) following = false
-            }
-        },
+            },
     ) {
         SelectionContainer(Modifier.fillMaxSize()) {
             LazyColumn(
                 state = listState,
                 reverseLayout = true,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                contentPadding = PaddingValues(horizontal = PaneHorizontalPadding, vertical = PaneVerticalPadding),
             ) {
                 items(count = lines.size, key = { lines[lines.lastIndex - it].id }, contentType = { 0 }) { index ->
-                    BasicText(lines[lines.lastIndex - index].text, Modifier.fillMaxWidth(), style = LineStyle)
+                    BasicText(lines[lines.lastIndex - index].text, Modifier.fillMaxWidth(), style = style)
                 }
             }
         }
+
+        if (pinching && window != null) TextSizeOverlay(textSize, window.columns, Modifier.align(OverlayAlignment))
 
         val newLines = if (following) 0L else newestId - shownId
         if (newLines > 0) {
@@ -188,6 +246,13 @@ fun OutputPane(lines: List<OutputLine>, modifier: Modifier = Modifier) {
         }
     }
 }
+
+private val PaneHorizontalPadding = 10.dp
+private val PaneVerticalPadding = 4.dp
+private const val WINDOW_SIZE_DEBOUNCE_MS = 300L
+
+// A little above center, clear of the fingers.
+private val OverlayAlignment = BiasAlignment(0f, -0.15f)
 
 private val ChipBackground = Color(0xFF1D2433)
 private val ChipBorder = Color(0xFF2F3D5C)

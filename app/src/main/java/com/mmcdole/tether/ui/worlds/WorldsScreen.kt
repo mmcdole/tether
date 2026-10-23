@@ -24,12 +24,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -61,6 +63,7 @@ fun WorldsScreen(
     onOpenSession: () -> Unit,
     onWorldLongClick: (Long) -> Unit,
     onAddWorld: () -> Unit,
+    onSettings: () -> Unit,
     viewModel: WorldsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -90,12 +93,17 @@ fun WorldsScreen(
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            Text(
-                "Worlds",
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 8.dp),
-                fontSize = 26.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Worlds",
+                    modifier = Modifier.weight(1f).padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 8.dp),
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                IconButton(onClick = onSettings, modifier = Modifier.padding(end = 4.dp, top = 6.dp)) {
+                    Icon(Icons.Outlined.Settings, contentDescription = "Settings", tint = TetherColors.TextDim)
+                }
+            }
             val active = state.active
             when {
                 state.loading -> Unit

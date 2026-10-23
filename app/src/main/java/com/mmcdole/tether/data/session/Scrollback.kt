@@ -15,8 +15,16 @@ class ScrollbackSnapshot(val lines: List<StyledLine>) {
  * The last [capacity] lines of a session. Ids only ever increase, even across [clear],
  * so the screen can key lines by id.
  */
-class Scrollback(private val capacity: Int = DEFAULT_CAPACITY) {
-    private val lines = ArrayDeque<StyledLine>(capacity)
+class Scrollback(capacity: Int = DEFAULT_CAPACITY) {
+    private val lines = ArrayDeque<StyledLine>()
+
+    /** Lowering it drops the oldest lines. */
+    var capacity: Int = capacity
+        set(value) {
+            require(value > 0)
+            field = value
+            while (lines.size > value) lines.removeFirst()
+        }
 
     /** The id the next line will get. The partial line borrows it, so it keeps its id once finished. */
     var nextId = 1L
@@ -26,7 +34,7 @@ class Scrollback(private val capacity: Int = DEFAULT_CAPACITY) {
 
     fun add(content: LineContent, kind: LineKind = LineKind.Output, echoStart: Int = -1): StyledLine {
         val line = StyledLine(nextId++, content.text, content.spans, kind, echoStart = echoStart)
-        if (lines.size == capacity) lines.removeFirst()
+        if (lines.size >= capacity) lines.removeFirst()
         lines.addLast(line)
         return line
     }

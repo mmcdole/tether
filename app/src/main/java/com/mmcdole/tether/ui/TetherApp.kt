@@ -7,6 +7,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.mmcdole.tether.ui.session.SessionScreen
+import com.mmcdole.tether.ui.settings.SettingsScreen
 import com.mmcdole.tether.ui.theme.TetherTheme
 import com.mmcdole.tether.ui.worlds.WorldEditScreen
 import com.mmcdole.tether.ui.worlds.WorldsScreen
@@ -24,6 +25,7 @@ fun TetherApp(openSession: Flow<Unit>) {
                     onOpenSession = { navController.openSession() },
                     onWorldLongClick = { navController.navigate(WorldEditRoute(it)) },
                     onAddWorld = { navController.navigate(WorldEditRoute()) },
+                    onSettings = { navController.navigate(SettingsRoute) },
                 )
             }
             composable<WorldEditRoute> {
@@ -31,7 +33,13 @@ fun TetherApp(openSession: Flow<Unit>) {
                 WorldEditScreen(onDone = { navController.popBackStack(WorldsRoute, inclusive = false) })
             }
             composable<SessionRoute> {
-                SessionScreen(onWorlds = { navController.popBackStack(WorldsRoute, inclusive = false) })
+                SessionScreen(
+                    onWorlds = { navController.popBackStack(WorldsRoute, inclusive = false) },
+                    onSettings = { navController.navigate(SettingsRoute) },
+                )
+            }
+            composable<SettingsRoute> {
+                SettingsScreen(onBack = { navController.popBackStack<SettingsRoute>(inclusive = true) })
             }
         }
     }

@@ -4,7 +4,6 @@ import com.mmcdole.tether.data.settings.SessionOptions
 import com.mmcdole.tether.data.settings.SessionOptionsSource
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
@@ -24,7 +23,7 @@ class FakeNetworkMonitor : NetworkMonitor {
 }
 
 class FixedSessionOptions(value: SessionOptions = SessionOptions()) : SessionOptionsSource {
-    override val options: StateFlow<SessionOptions> = MutableStateFlow(value)
+    override val options = MutableStateFlow(value)
 }
 
 /** Real time plus whatever [advance] has added, for code that compares timestamps. */

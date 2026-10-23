@@ -62,4 +62,16 @@ class ScrollbackTest {
         scrollback.clear()
         assertEquals(2L, scrollback.add(text("b")).id)
     }
+
+    @Test
+    fun loweringCapacityDropsOldestAndRaisingItKeepsMore() {
+        val scrollback = Scrollback(capacity = 5)
+        repeat(5) { scrollback.add(text("line $it")) }
+        scrollback.capacity = 2
+        assertEquals(listOf("line 3", "line 4"), scrollback.snapshot().lines.map { it.text })
+
+        scrollback.capacity = 4
+        repeat(3) { scrollback.add(text("more $it")) }
+        assertEquals(listOf("line 4", "more 0", "more 1", "more 2"), scrollback.snapshot().lines.map { it.text })
+    }
 }
