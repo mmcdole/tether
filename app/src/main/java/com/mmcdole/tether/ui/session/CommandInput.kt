@@ -1,5 +1,9 @@
 package com.mmcdole.tether.ui.session
 
+import android.text.InputType
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.platform.InterceptPlatformTextInput
+import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -123,6 +127,7 @@ fun CommandInput(
                 decorator = decorator(secret, "Password"),
             )
         } else {
+            NoSuggestions(enabled = !autocorrect) {
             BasicTextField(
                 state = command,
                 modifier = fieldModifier.fadeStartWhenScrolled(scroll),
@@ -140,8 +145,33 @@ fun CommandInput(
                 onKeyboardAction = { send(command) },
                 decorator = decorator(command, "Send a command"),
             )
+            }
         }
     }
+}
+
+/**
+ * Hides the keyboard's suggestion strip. Gboard ignores the no-suggestions flag, so the field also
+ * says it's a visible password, as terminal apps do. Compose has no option for either.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun NoSuggestions(enabled: Boolean, content: @Composable () -> Unit) {
+    if (!enabled) return content()
+    InterceptPlatformTextInput(
+        interceptor = { request, next ->
+            next.startInputMethod(
+                PlatformTextInputMethodRequest { info ->
+                    request.createInputConnection(info).also {
+                        info.inputType = InputType.TYPE_CLASS_TEXT or
+                            InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or
+                            InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                    }
+                },
+            )
+        },
+        content = content,
+    )
 }
 
 private val FieldShape = RoundedCornerShape(8.dp)
