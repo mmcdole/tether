@@ -1,6 +1,7 @@
 package com.mmcdole.tether.ui.session
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
@@ -75,13 +76,17 @@ fun renderLines(lines: List<StyledLine>, previous: List<OutputLine>): List<Outpu
 fun StyledLine.toAnnotatedString(): AnnotatedString = buildAnnotatedString {
     append(text)
     for (span in spans) addStyle(span.style.toSpanStyle(), span.start, span.end)
+    // The tint behind it is drawn across the whole row, by highlightTint.
+    highlight?.let { addStyle(SpanStyle(color = Color(0xFF000000.toInt() or it)), 0, text.length) }
     when (kind) {
         LineKind.Echo, LineKind.System -> addStyle(Dim, 0, text.length)
         LineKind.Prompt -> if (echoStart in 0..text.length) addStyle(Dim, echoStart, text.length)
         LineKind.Output -> Unit
     }
-    highlight?.let { addStyle(SpanStyle(background = Color(0x38000000 or it)), 0, text.length) }
 }
+
+/** A trigger highlight's faint tint, as in the mockup: the color at 22% across the line. */
+fun highlightTint(rgb: Int) = Color(0x38000000 or rgb)
 
 private val Dim = SpanStyle(color = TetherColors.TextDim)
 
@@ -217,7 +222,9 @@ fun OutputPane(
                 contentPadding = PaddingValues(horizontal = PaneHorizontalPadding, vertical = PaneVerticalPadding),
             ) {
                 items(count = lines.size, key = { lines[lines.lastIndex - it].id }, contentType = { 0 }) { index ->
-                    BasicText(lines[lines.lastIndex - index].text, Modifier.fillMaxWidth(), style = style)
+                    val line = lines[lines.lastIndex - index]
+                    val tint = line.line.highlight?.let { Modifier.background(highlightTint(it)) } ?: Modifier
+                    BasicText(line.text, Modifier.fillMaxWidth().then(tint), style = style)
                 }
             }
         }

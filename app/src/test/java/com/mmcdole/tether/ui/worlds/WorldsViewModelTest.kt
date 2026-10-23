@@ -3,6 +3,7 @@ package com.mmcdole.tether.ui.worlds
 import com.mmcdole.tether.data.rules.FakeRuleDao
 import com.mmcdole.tether.data.rules.RuleRepository
 import com.mmcdole.tether.data.session.FakeNetworkMonitor
+import com.mmcdole.tether.data.session.FakeTriggerAlerts
 import com.mmcdole.tether.data.session.FixedSessionOptions
 import com.mmcdole.tether.data.session.ReconnectPolicy
 import com.mmcdole.tether.data.session.SessionManager
@@ -47,11 +48,12 @@ class WorldsViewModelTest {
         repository.save(World(name = "Test MUD", host = "localhost", port = 7680))
         dao.setLastConnected(alt, clock.instant().minus(Duration.ofDays(1)).toEpochMilli())
 
+        val rules = RuleRepository(FakeRuleDao(), clock, dispatcher)
         val session = SessionManager(
-            repository, { _, _, _ -> error("no network") }, FakeNetworkMonitor(), ReconnectPolicy(), FixedSessionOptions(),
-            backgroundScope, dispatcher, StandardTestDispatcher(testScheduler), clock,
+            repository, rules, { _, _, _ -> error("no network") }, FakeNetworkMonitor(), ReconnectPolicy(), FixedSessionOptions(),
+            FakeTriggerAlerts(), backgroundScope, dispatcher, StandardTestDispatcher(testScheduler), clock,
         )
-        val vm = WorldsViewModel(repository, RuleRepository(FakeRuleDao(), clock, dispatcher), session, clock)
+        val vm = WorldsViewModel(repository, rules, session, clock)
         backgroundScope.launch { vm.state.collect {} }
 
         val state = vm.state.value

@@ -32,8 +32,8 @@ class Scrollback(capacity: Int = DEFAULT_CAPACITY) {
 
     val last: StyledLine? get() = lines.lastOrNull()
 
-    fun add(content: LineContent, kind: LineKind = LineKind.Output, echoStart: Int = -1): StyledLine {
-        val line = StyledLine(nextId++, content.text, content.spans, kind, echoStart = echoStart)
+    fun add(content: LineContent, kind: LineKind = LineKind.Output, echoStart: Int = -1, highlight: Int? = null): StyledLine {
+        val line = StyledLine(nextId++, content.text, content.spans, kind, highlight, echoStart)
         if (lines.size >= capacity) lines.removeFirst()
         lines.addLast(line)
         return line

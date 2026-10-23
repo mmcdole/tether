@@ -46,6 +46,7 @@ fun TetherApp(openSession: Flow<Unit>) {
                 SessionScreen(
                     onWorlds = { navController.popBackStack(WorldsRoute, inclusive = false) },
                     onSettings = { navController.navigate(SettingsRoute) },
+                    onRules = { navController.navigate(RulesRoute(it)) },
                 )
             }
             composable<SettingsRoute> {

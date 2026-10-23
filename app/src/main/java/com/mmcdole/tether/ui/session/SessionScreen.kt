@@ -39,6 +39,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -53,7 +57,12 @@ import com.mmcdole.tether.ui.theme.TetherColors
 import com.mmcdole.tether.ui.uptime
 
 @Composable
-fun SessionScreen(onWorlds: () -> Unit, onSettings: () -> Unit, viewModel: SessionViewModel = hiltViewModel()) {
+fun SessionScreen(
+    onWorlds: () -> Unit,
+    onSettings: () -> Unit,
+    onRules: (worldId: Long) -> Unit,
+    viewModel: SessionViewModel = hiltViewModel(),
+) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val hideStatusBar = settings?.hideStatusBar == true
@@ -72,7 +81,7 @@ fun SessionScreen(onWorlds: () -> Unit, onSettings: () -> Unit, viewModel: Sessi
             .windowInsetsPadding(insets),
     ) {
         FirstRunPrompts()
-        TopBar(state, onDisconnect = viewModel::disconnect, onWorlds = onWorlds, onSettings = onSettings)
+        TopBar(state, onDisconnect = viewModel::disconnect, onWorlds = onWorlds, onSettings = onSettings, onRules = onRules)
         val current = settings
         if (current == null) {
             Spacer(Modifier.weight(1f))
@@ -121,7 +130,13 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 }
 
 @Composable
-private fun TopBar(state: SessionUiState, onDisconnect: () -> Unit, onWorlds: () -> Unit, onSettings: () -> Unit) {
+private fun TopBar(
+    state: SessionUiState,
+    onDisconnect: () -> Unit,
+    onWorlds: () -> Unit,
+    onSettings: () -> Unit,
+    onRules: (worldId: Long) -> Unit,
+) {
     var menu by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().height(40.dp).padding(start = 12.dp),
@@ -148,6 +163,11 @@ private fun TopBar(state: SessionUiState, onDisconnect: () -> Unit, onWorlds: ()
             }
             Text(meta, fontSize = 12.sp, color = TetherColors.TextDim, maxLines = 1)
         }
+        state.worldId?.let { id ->
+            IconButton(onClick = { onRules(id) }, modifier = Modifier.size(40.dp)) {
+                Icon(BoltIcon, contentDescription = "Rules", modifier = Modifier.size(20.dp), tint = TetherColors.TextDim)
+            }
+        }
         Box {
             IconButton(onClick = { menu = true }, modifier = Modifier.size(40.dp)) {
                 Icon(Icons.Filled.MoreVert, contentDescription = "More", tint = TetherColors.TextDim)
@@ -162,6 +182,23 @@ private fun TopBar(state: SessionUiState, onDisconnect: () -> Unit, onWorlds: ()
         }
     }
     HorizontalDivider(color = TetherColors.Line)
+}
+
+/** The lightning bolt from the mockup's top bar. */
+private val BoltIcon: ImageVector by lazy {
+    ImageVector.Builder("Bolt", 24.dp, 24.dp, 24f, 24f).path(
+        stroke = SolidColor(Color.White),
+        strokeLineWidth = 1.8f,
+        strokeLineJoin = StrokeJoin.Round,
+    ) {
+        moveTo(13f, 2f)
+        lineTo(4f, 14f)
+        horizontalLineToRelative(7f)
+        lineToRelative(-1f, 8f)
+        lineToRelative(9f, -12f)
+        horizontalLineToRelative(-7f)
+        close()
+    }.build()
 }
 
 private val ConnectionStatus.dotColor: Color

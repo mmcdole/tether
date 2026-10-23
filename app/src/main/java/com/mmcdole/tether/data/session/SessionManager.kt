@@ -1,12 +1,20 @@
 package com.mmcdole.tether.data.session
 
+import com.mmcdole.tether.data.rules.Removal
+import com.mmcdole.tether.data.rules.RuleRepository
 import com.mmcdole.tether.data.settings.SessionOptionsSource
 import com.mmcdole.tether.data.world.World
 import com.mmcdole.tether.data.world.WorldRepository
 import com.mmcdole.tether.di.ApplicationScope
 import com.mmcdole.tether.di.DefaultDispatcher
 import com.mmcdole.tether.di.IoDispatcher
+import com.mmcdole.tether.mud.command.CommandParser
 import com.mmcdole.tether.mud.command.CommandSplitter
+import com.mmcdole.tether.mud.command.Step
+import com.mmcdole.tether.mud.rules.RuleSet
+import com.mmcdole.tether.mud.rules.Scope
+import com.mmcdole.tether.mud.rules.Trigger
+import com.mmcdole.tether.mud.rules.TriggerEngine
 import com.mmcdole.tether.mud.text.LineContent
 import com.mmcdole.tether.mud.text.LineKind
 import java.io.IOException
@@ -20,6 +28,7 @@ import javax.inject.Singleton
 import javax.net.ssl.SSLException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.channels.Channel
@@ -29,21 +38,29 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
- * Owns the one live MUD session: the connection, its scrollback, auto-login, and
+ * Owns the one live MUD session: the connection, its scrollback, auto-login, rules, and
  * reconnecting after a drop. Lives as long as the app process. Every change runs on
  * [session], one at a time.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class SessionManager @Inject constructor(
     private val worlds: WorldRepository,
+    private val rules: RuleRepository,
     private val socketFactory: MudSocketFactory,
     private val network: NetworkMonitor,
     private val policy: ReconnectPolicy,
     private val options: SessionOptionsSource,
+    private val alerts: TriggerAlerts,
     @ApplicationScope private val scope: CoroutineScope,
     @IoDispatcher private val io: CoroutineDispatcher,
     @DefaultDispatcher default: CoroutineDispatcher,
@@ -70,7 +87,15 @@ class SessionManager @Inject constructor(
     /** Commands typed this session, oldest first. Passwords are never kept. */
     val history: StateFlow<List<String>> = _history.asStateFlow()
 
+    private val _ruleSet = MutableStateFlow(RuleSet.Empty)
+
+    /** The rules for [world]: its own plus the global ones. Edits show up here before the next line. */
+    val ruleSet: StateFlow<RuleSet> = _ruleSet.asStateFlow()
+
     private val lines = Scrollback(options.options.value.scrollbackLines)
+
+    // `#` commands suspend on the database. This keeps typed input and incoming lines in order across that.
+    private val commands = Mutex()
     private var partial = LineContent.Empty
     private var connection: MudConnection? = null
     private var job: Job? = null
@@ -85,6 +110,12 @@ class SessionManager @Inject constructor(
     init {
         scope.launch(session) { network.events.collect(::onNetwork) }
         scope.launch(session) {
+            _world.map { it?.id }
+                .distinctUntilChanged()
+                .flatMapLatest { id -> if (id == null) flowOf(RuleSet.Empty) else rules.observeRuleSet(id) }
+                .collect { _ruleSet.value = it }
+        }
+        scope.launch(session) {
             options.options.map { it.scrollbackLines }.distinctUntilChanged().collect {
                 lines.capacity = it
                 publish()
@@ -94,11 +125,14 @@ class SessionManager @Inject constructor(
 
     fun connect(world: World) = onSession {
         stop()
-        if (_world.value?.id != world.id) {
+        val newWorld = _world.value?.id != world.id
+        if (newWorld) {
             lines.clear()
             _history.value = emptyList()
         }
         _world.value = world
+        // Loaded before connecting, so the first line already has this world's triggers.
+        if (newWorld) _ruleSet.value = rules.observeRuleSet(world.id).first()
         _state.value = SessionState.Connecting(world)
         publish()
         job = scope.launch(session) { run(world) }
@@ -116,16 +150,32 @@ class SessionManager @Inject constructor(
         ended("Disconnected")
     }
 
-    fun send(input: String) = onSession {
-        val conn = connection ?: return@onSession
-        // While the server echoes, the input is a password: not echoed, not remembered.
-        val echo = !conn.serverEcho
-        if (echo && input.isNotBlank() && _history.value.lastOrNull() != input) {
+    /**
+     * Sends typed input: split on `;`, aliases expanded, `#` commands run here. Each command is
+     * parsed after the one before it ran, so `#alias k {kill %1};k rat` uses the new alias. While
+     * disconnected only the `#` commands do anything.
+     */
+    fun send(input: String) = onSession { commands.withLock { sendNow(input) } }
+
+    private suspend fun sendNow(input: String) {
+        val world = _world.value ?: return
+        val conn = connection
+        // While the server echoes, the input is a password: sent as typed, not echoed, not remembered.
+        if (conn != null && conn.serverEcho) {
+            conn.sendLine(input)
+            return
+        }
+        if (input.isNotBlank() && _history.value.lastOrNull() != input) {
             _history.value = (_history.value + input).takeLast(HISTORY_SIZE)
         }
         for (command in CommandSplitter.split(input)) {
-            conn.sendLine(command)
-            if (echo) echo(conn, command)
+            val steps = CommandParser.parseCommand(command, _ruleSet.value.aliases)
+            when {
+                conn != null -> echo(conn, command)
+                steps.all { it is Step.Send } -> continue
+                else -> lines.add(LineContent(command, emptyList()), LineKind.Echo)
+            }
+            perform(steps, conn, world)
         }
         publish()
     }
@@ -209,7 +259,7 @@ class SessionManager @Inject constructor(
             coroutineScope {
                 launch { conn.runWriter() }
                 launch { conn.runKeepalive() }
-                readUntilEnd(conn).also { coroutineContext.cancelChildren() }
+                readUntilEnd(world, conn).also { coroutineContext.cancelChildren() }
             }
         } catch (e: IOException) {
             // The writer failing, as in a broken pipe.
@@ -219,12 +269,12 @@ class SessionManager @Inject constructor(
         }
     }
 
-    private suspend fun readUntilEnd(conn: MudConnection): ConnectionEnd {
+    private suspend fun readUntilEnd(world: World, conn: MudConnection): ConnectionEnd {
         while (true) {
             when (val result = conn.read()) {
                 is Received -> {
                     val echoWasOn = _serverEcho.value
-                    apply(result, conn)
+                    commands.withLock { apply(result, conn, world) }
                     autoLogin(conn, result, echoTurnedOn = !echoWasOn && conn.serverEcho)
                 }
                 is ConnectionEnd -> return result
@@ -232,8 +282,22 @@ class SessionManager @Inject constructor(
         }
     }
 
-    private fun apply(received: Received, conn: MudConnection) {
-        for (line in received.lines) lines.add(line.content, if (line.prompt) LineKind.Prompt else LineKind.Output)
+    /** Adds finished lines, running triggers on each. The partial line is left alone until it's finished. */
+    private suspend fun apply(received: Received, conn: MudConnection, world: World) {
+        for (line in received.lines) {
+            val result = TriggerEngine.run(_ruleSet.value, line.content.text, world.name)
+            if (!result.gag) {
+                lines.add(line.content, if (line.prompt) LineKind.Prompt else LineKind.Output, highlight = result.highlight)
+            }
+            if (result.isEmpty) continue
+            if (result.vibrate) alerts.vibrate()
+            for (request in result.notifications) alerts.notify(world, request)
+            // Already split by the engine. Shown dim, like typed commands, so you can see what fired.
+            for (command in result.commands) {
+                if (!conn.serverEcho) lines.add(LineContent(command, emptyList()), LineKind.Echo)
+                perform(CommandParser.parseCommand(command, _ruleSet.value.aliases), conn, world)
+            }
+        }
         partial = received.partial
         _serverEcho.value = conn.serverEcho
         publish()
@@ -263,6 +327,67 @@ class SessionManager @Inject constructor(
             }
             Login.Step.Done -> Unit
         }
+    }
+
+    /** Sends the [Step.Send]s through [conn], if connected, and runs the rest here. */
+    private suspend fun perform(steps: List<Step>, conn: MudConnection?, world: World) {
+        for (step in steps) {
+            if (step is Step.Send) {
+                conn?.sendLine(step.command)
+                continue
+            }
+            for (text in local(step, world)) lines.add(LineContent(text, emptyList()), LineKind.System)
+        }
+    }
+
+    /** Runs a `#` command and returns the lines to show for it. */
+    private suspend fun local(step: Step, world: World): List<String> {
+        fun scope(global: Boolean) = if (global) Scope.Global else Scope.World(world.id)
+        fun allWorlds(global: Boolean) = if (global) ALL_WORLDS else ""
+        fun removed(what: String, removal: Removal) = when (removal) {
+            is Removal.Removed -> "Removed $what" + allWorlds(removal.scope == Scope.Global)
+            Removal.NotFound -> "No $what"
+        }
+        val lines = when (step) {
+            is Step.AddAlias -> {
+                rules.addAlias(scope(step.global), step.name, step.expansion)
+                listOf("#alias ${step.name} = ${step.expansion}" + allWorlds(step.global))
+            }
+            is Step.AddAction -> {
+                rules.addAction(scope(step.global), step.pattern, step.command)
+                listOf("#action {${step.pattern}} = ${step.command}" + allWorlds(step.global))
+            }
+            is Step.AddGag -> {
+                rules.addGag(scope(step.global), step.pattern)
+                listOf("#gag {${step.pattern}}" + allWorlds(step.global))
+            }
+            is Step.RemoveAlias -> listOf(removed("alias ${step.name}", rules.removeAlias(world.id, step.name)))
+            is Step.RemoveAction -> listOf(removed("action {${step.pattern}}", rules.removeAction(world.id, step.pattern)))
+            is Step.RemoveGag -> listOf(removed("gag {${step.pattern}}", rules.removeGag(world.id, step.pattern)))
+            Step.ListAliases -> {
+                val lists = rules.observeRules(world.id).first()
+                val all = lists.worldAliases.map { it to false } + lists.globalAliases.map { it to true }
+                all.filter { it.first.enabled }
+                    .map { (alias, global) -> "#alias ${alias.name} = ${alias.expansion}" + allWorlds(global) }
+                    .ifEmpty { listOf("No aliases") }
+            }
+            Step.ListTriggers -> {
+                val lists = rules.observeRules(world.id).first()
+                val all = lists.worldTriggers.map { it to false } + lists.globalTriggers.map { it to true }
+                all.filter { it.first.enabled }
+                    .map { (trigger, global) -> trigger.describe() + allWorlds(global) }
+                    .ifEmpty { listOf("No triggers") }
+            }
+            is Step.Error -> listOf(step.message)
+            is Step.Send -> emptyList()
+        }
+        // Read back now rather than waiting on the database flow, so the very next command or line sees it.
+        if (step is Step.AddAlias || step is Step.AddAction || step is Step.AddGag ||
+            step is Step.RemoveAlias || step is Step.RemoveAction || step is Step.RemoveGag
+        ) {
+            _ruleSet.value = rules.observeRuleSet(world.id).first()
+        }
+        return lines
     }
 
     /** Shows a sent command after the prompt it answers, or on its own line. */
@@ -319,7 +444,21 @@ class SessionManager @Inject constructor(
 
     private companion object {
         const val HISTORY_SIZE = 100
+        const val ALL_WORLDS = " (all worlds)"
     }
+}
+
+/** A trigger as one line for `#action` with no arguments, like `{The %1 slashes you.} = flee`. */
+private fun Trigger.describe(): String {
+    val actions = listOfNotNull(
+        "gag".takeIf { gag },
+        highlight?.let { "highlight #%06X".format(it) },
+        send?.takeIf { it.isNotBlank() },
+        "vibrate".takeIf { vibrate },
+        "notify".takeIf { notify },
+    )
+    val regex = if (isRegex) " (regex)" else ""
+    return "{$pattern}$regex = ${actions.joinToString(" · ")}"
 }
 
 private fun IOException.reason(): String = when (this) {

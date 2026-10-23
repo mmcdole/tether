@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 enum class ConnectionStatus { Idle, Connecting, Reconnecting, Connected }
 
 data class SessionUiState(
+    val worldId: Long? = null,
     val worldName: String = "",
     val status: ConnectionStatus = ConnectionStatus.Idle,
     val connectedSince: Instant? = null,
@@ -52,11 +53,11 @@ class SessionViewModel @Inject constructor(
         session.serverEcho,
         session.history,
     ) { state, world, lines, serverEcho, history ->
-        uiState(state, world?.name.orEmpty(), lines, serverEcho, history)
+        uiState(state, world?.id, world?.name.orEmpty(), lines, serverEcho, history)
     }.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
-        uiState(session.state.value, session.world.value?.name.orEmpty(), emptyList(), false, emptyList()),
+        uiState(session.state.value, session.world.value?.id, session.world.value?.name.orEmpty(), emptyList(), false, emptyList()),
     )
 
     // The size while pinching, until it's saved.
@@ -89,11 +90,13 @@ class SessionViewModel @Inject constructor(
 
     private fun uiState(
         state: SessionState,
+        worldId: Long?,
         worldName: String,
         lines: List<OutputLine>,
         serverEcho: Boolean,
         history: List<String>,
     ) = SessionUiState(
+        worldId = worldId,
         worldName = worldName,
         status = when (state) {
             SessionState.Idle -> ConnectionStatus.Idle

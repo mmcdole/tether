@@ -13,8 +13,10 @@ import com.mmcdole.tether.data.session.AndroidNetworkMonitor
 import com.mmcdole.tether.data.session.MudSocketFactory
 import com.mmcdole.tether.data.session.NetworkMonitor
 import com.mmcdole.tether.data.session.TcpSocketFactory
+import com.mmcdole.tether.data.session.TriggerAlerts
 import com.mmcdole.tether.data.settings.SessionOptionsSource
 import com.mmcdole.tether.data.settings.StoredSessionOptions
+import com.mmcdole.tether.service.AndroidTriggerAlerts
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -48,6 +50,9 @@ object DataModule {
 
     @Provides
     fun provideNetworkMonitor(monitor: AndroidNetworkMonitor): NetworkMonitor = monitor
+
+    @Provides
+    fun provideTriggerAlerts(alerts: AndroidTriggerAlerts): TriggerAlerts = alerts
 
     @Provides
     @Singleton

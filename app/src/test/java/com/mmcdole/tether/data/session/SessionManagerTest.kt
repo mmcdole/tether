@@ -1,11 +1,16 @@
 package com.mmcdole.tether.data.session
 
+import com.mmcdole.tether.data.rules.FakeRuleDao
+import com.mmcdole.tether.data.rules.RuleRepository
 import com.mmcdole.tether.data.settings.SessionOptions
 import com.mmcdole.tether.data.world.FakeWorldDao
 import com.mmcdole.tether.data.world.PasswordEdit
 import com.mmcdole.tether.data.world.World
 import com.mmcdole.tether.data.world.WorldRepository
 import com.mmcdole.tether.data.world.testSecrets
+import com.mmcdole.tether.mud.rules.Alias
+import com.mmcdole.tether.mud.rules.Scope
+import com.mmcdole.tether.mud.rules.Trigger
 import com.mmcdole.tether.mud.text.LineKind
 import com.mmcdole.tether.mud.text.StyledLine
 import java.time.Clock
@@ -26,6 +31,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -37,6 +43,9 @@ class SessionManagerTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val plainWorld = World(id = 1, name = "Test MUD", host = "localhost", port = 4000)
 
+    private val rules = RuleRepository(FakeRuleDao(), Clock.systemUTC(), Dispatchers.IO)
+    private val alerts = FakeTriggerAlerts()
+    private val thisWorld = Scope.World(plainWorld.id)
     private val network = FakeNetworkMonitor()
     private val clock = AdvancingClock()
 
@@ -47,8 +56,8 @@ class SessionManagerTest {
         maxAttempts: Int = ReconnectPolicy.MAX_ATTEMPTS,
         source: FixedSessionOptions = FixedSessionOptions(options),
     ) = SessionManager(
-        repository, factory, network, ReconnectPolicy(listOf(retryDelay), maxAttempts), source,
-        scope, Dispatchers.IO, Dispatchers.Default, clock,
+        repository, rules, factory, network, ReconnectPolicy(listOf(retryDelay), maxAttempts), source,
+        alerts, scope, Dispatchers.IO, Dispatchers.Default, clock,
     )
 
     private suspend fun SessionManager.awaitState(predicate: (SessionState) -> Boolean): SessionState =
@@ -323,6 +332,186 @@ class SessionManagerTest {
         } finally {
             conn.close()
         }
+    }
+
+    private fun List<StyledLine>.systemTexts() = filter { it.kind == LineKind.System }.map { it.text }
+
+    @Test
+    fun gagDropsTheLine() = runBlocking<Unit> {
+        rules.save(Trigger(0, thisWorld, "The fountain gurgles.", gag = true))
+        val manager = manager().connected()
+        server.send("North.\r\nThe fountain gurgles.\r\nSouth.\r\n")
+        manager.awaitTexts("North.", "South.")
+    }
+
+    @Test
+    fun highlightIsSetAndWorldAndGlobalTriggersBothFire() = runBlocking<Unit> {
+        rules.save(Trigger(0, Scope.Global, "%1 tells you: %2", highlight = 0xE2A6F5))
+        rules.save(Trigger(0, thisWorld, "tells you", vibrate = true))
+        val manager = manager().connected()
+        server.send("Hagbard tells you: hi\r\nThe rat dies.\r\n")
+        val lines = manager.awaitTexts("Hagbard tells you: hi", "The rat dies.")
+        assertEquals(0xE2A6F5, lines[0].highlight)
+        assertNull(lines[1].highlight)
+        assertEquals(1, alerts.vibrations.get())
+    }
+
+    @Test
+    fun triggerSendGoesOutThroughAliasExpansionAndShowsDim() = runBlocking<Unit> {
+        rules.save(Alias(0, thisWorld, "k", "kill %1"))
+        rules.save(Trigger(0, thisWorld, "The %1 attacks you.", send = "k %1;grin"))
+        val manager = manager().connected()
+        server.send("The rat attacks you.\r\n")
+        assertEquals("kill rat", server.awaitLine())
+        assertEquals("grin", server.awaitLine())
+        val lines = manager.awaitTexts("The rat attacks you.", "k rat", "grin")
+        assertEquals(listOf(LineKind.Output, LineKind.Echo, LineKind.Echo), lines.map { it.kind })
+    }
+
+    @Test
+    fun worldAliasBeatsGlobalAlias() = runBlocking<Unit> {
+        rules.save(Alias(0, Scope.Global, "k", "kick %1"))
+        rules.save(Alias(0, thisWorld, "k", "kill %1"))
+        val manager = manager().connected()
+        manager.send("k rat")
+        assertEquals("kill rat", server.awaitLine())
+        // The echo is what was typed.
+        manager.awaitTexts("k rat")
+        assertEquals(listOf("k rat"), manager.history.value)
+    }
+
+    @Test
+    fun aliasTypedMidSessionAppliesToTheNextCommand() = runBlocking<Unit> {
+        val manager = manager().connected()
+        manager.send("#alias k {say %1}")
+        manager.send("k hi")
+        assertEquals("say hi", server.awaitLine())
+        val lines = manager.awaitTexts("#alias k {say %1}", "#alias k = say %1", "k hi")
+        assertEquals(listOf(LineKind.Echo, LineKind.System, LineKind.Echo), lines.map { it.kind })
+        assertTrue("the # command itself never reaches the MUD", server.noMoreLines())
+
+        // Later commands on the same line see it too.
+        manager.send("#alias g {grin};g")
+        assertEquals("grin", server.awaitLine())
+    }
+
+    @Test
+    fun hashCommandsShowOneSystemLineEach() = runBlocking<Unit> {
+        val manager = manager().connected()
+        manager.send("#galias l look")
+        manager.send("#action {The %1 slashes you.} {flee}")
+        manager.send("#gag {The fountain gurgles.}")
+        manager.send("#ggag spam")
+        manager.send("#alias")
+        manager.send("#action")
+        manager.send("#alias k")
+        manager.send("#bogus")
+        val expected = listOf(
+            "#alias l = look (all worlds)",
+            "#action {The %1 slashes you.} = flee",
+            "#gag {The fountain gurgles.}",
+            "#gag {spam} (all worlds)",
+            "#alias l = look (all worlds)",
+            "{The %1 slashes you.} = flee",
+            "{The fountain gurgles.} = gag",
+            "{spam} = gag (all worlds)",
+            "Usage: #alias {name} {expansion}",
+            "Unknown command: #bogus",
+        )
+        withTimeout(2_000) { manager.scrollback.first { it.lines.systemTexts() == expected } }
+        assertTrue(server.noMoreLines())
+    }
+
+    @Test
+    fun hashCommandsWorkWhileDisconnected() = runBlocking<Unit> {
+        val manager = manager().connected()
+        manager.disconnect()
+        manager.awaitState { it == SessionState.Idle }
+        manager.send("look")
+        manager.send("#alias k kill %1")
+        manager.awaitTexts("Disconnected", "#alias k kill %1", "#alias k = kill %1")
+        assertEquals("kill %1", manager.ruleSet.value.aliases.getValue("k").expansion)
+    }
+
+    @Test
+    fun unaliasRemovesTheWorldAliasFirstThenTheGlobalOne() = runBlocking<Unit> {
+        val manager = manager().connected()
+        manager.send("#galias k kick %1")
+        manager.send("#alias k kill %1")
+        manager.send("k rat")
+        assertEquals("kill rat", server.awaitLine())
+        manager.send("#unalias k")
+        manager.send("k rat")
+        assertEquals("kick rat", server.awaitLine())
+        manager.send("#unalias k")
+        manager.send("k rat")
+        assertEquals("k rat", server.awaitLine())
+        manager.send("#unalias k")
+        val expected = listOf(
+            "#alias k = kick %1 (all worlds)",
+            "#alias k = kill %1",
+            "Removed alias k",
+            "Removed alias k (all worlds)",
+            "No alias k",
+        )
+        withTimeout(2_000) { manager.scrollback.first { it.lines.systemTexts() == expected } }
+    }
+
+    @Test
+    fun ruleEditFromTheRulesScreenAppliesLive() = runBlocking<Unit> {
+        val manager = manager().connected()
+        server.send("The fountain gurgles.\r\n")
+        manager.awaitTexts("The fountain gurgles.")
+
+        val id = rules.save(Trigger(0, thisWorld, "The fountain gurgles.", gag = true))
+        withTimeout(2_000) { manager.ruleSet.first { it.triggers.isNotEmpty() } }
+        server.send("The fountain gurgles.\r\nNorth.\r\n")
+        manager.awaitTexts("The fountain gurgles.", "North.")
+
+        rules.setEnabled(id, false)
+        withTimeout(2_000) { manager.ruleSet.first { it.triggers.isEmpty() } }
+        server.send("The fountain gurgles.\r\n")
+        manager.awaitTexts("The fountain gurgles.", "North.", "The fountain gurgles.")
+    }
+
+    @Test
+    fun gaPromptRunsTriggersButThePartialLineDoesNot() = runBlocking<Unit> {
+        rules.save(Trigger(0, thisWorld, "HP:", vibrate = true))
+        val manager = manager().connected()
+        server.send("HP:10 > ")
+        manager.awaitTexts("HP:10 > ")
+        delay(100)
+        assertEquals(0, alerts.vibrations.get())
+        server.send(GA)
+        manager.awaitLines { it.lastOrNull()?.kind == LineKind.Prompt }
+        withTimeout(2_000) { while (alerts.vibrations.get() == 0) delay(10) }
+    }
+
+    @Test
+    fun notifyGoesToTriggerAlerts() = runBlocking<Unit> {
+        rules.save(Trigger(0, Scope.Global, "%1 tells you: %2", notify = true))
+        rules.save(Trigger(0, thisWorld, "shouts", notify = true, vibrate = true))
+        val manager = manager().connected()
+        server.send("Hagbard tells you: wanna group?\r\nGrog shouts hello\r\n")
+        manager.awaitTexts("Hagbard tells you: wanna group?", "Grog shouts hello")
+        withTimeout(2_000) { while (alerts.notifications.size < 2) delay(10) }
+        val (first, second) = alerts.notifications.map { it.second }
+        assertEquals("Hagbard" to "wanna group?", first.title to first.message)
+        assertEquals("Test MUD" to "Grog shouts hello", second.title to second.message)
+        assertEquals(plainWorld, alerts.notifications[0].first)
+        assertEquals(1, alerts.vibrations.get())
+    }
+
+    @Test
+    fun passwordIsSentAsTypedWithoutParsing() = runBlocking<Unit> {
+        rules.save(Alias(0, thisWorld, "hunter2", "nope"))
+        val manager = manager().connected()
+        server.send("Password: ".toByteArray() + WILL_ECHO)
+        withTimeout(2_000) { manager.serverEcho.first { it } }
+        manager.send("hunter2;#x")
+        assertEquals("hunter2;#x", server.awaitLine())
+        delay(100)
+        assertEquals(listOf("Password: "), manager.scrollback.value.lines.map { it.text })
     }
 
     private suspend fun login(manager: SessionManager) {

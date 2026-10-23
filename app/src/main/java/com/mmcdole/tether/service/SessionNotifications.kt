@@ -16,6 +16,7 @@ import com.mmcdole.tether.R
 import com.mmcdole.tether.data.session.SessionState
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Singleton
 
 @Singleton
@@ -29,7 +30,7 @@ class SessionNotifications @Inject constructor(@ApplicationContext private val c
                     .setName("Session")
                     .setShowBadge(false)
                     .build(),
-                // Trigger notifications, from phase 8.
+                // Trigger notifications.
                 NotificationChannelCompat.Builder(CHANNEL_MESSAGES, NotificationManagerCompat.IMPORTANCE_HIGH)
                     .setName("Messages")
                     .build(),
@@ -37,15 +38,19 @@ class SessionNotifications @Inject constructor(@ApplicationContext private val c
         )
     }
 
+    private val nextMessageId = AtomicInteger(FIRST_MESSAGE_ID)
+
+    private fun openSession(): PendingIntent = PendingIntent.getActivity(
+        context,
+        0,
+        Intent(context, MainActivity::class.java)
+            .setAction(MainActivity.ACTION_OPEN_SESSION)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
     fun ongoing(state: SessionState): Notification {
-        val open = PendingIntent.getActivity(
-            context,
-            0,
-            Intent(context, MainActivity::class.java)
-                .setAction(MainActivity.ACTION_OPEN_SESSION)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
+        val open = openSession()
         val disconnect = PendingIntent.getService(
             context,
             0,
@@ -73,9 +78,28 @@ class SessionNotifications @Inject constructor(@ApplicationContext private val c
     }
 
     fun update(state: SessionState) {
+        post(ONGOING_ID, ongoing(state))
+    }
+
+    /** A trigger's notification on the Messages channel. Tapping it opens the session. */
+    fun message(title: String, text: String) {
+        val notification = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(openSession())
+            .setAutoCancel(true)
+            .build()
+        post(nextMessageId.getAndIncrement(), notification)
+    }
+
+    private fun post(id: Int, notification: Notification) {
         val allowed = Build.VERSION.SDK_INT < 33 ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-        if (allowed) manager.notify(ONGOING_ID, ongoing(state))
+        if (allowed) manager.notify(id, notification)
     }
 
     private fun SessionState.title(): String = when (this) {
@@ -89,5 +113,6 @@ class SessionNotifications @Inject constructor(@ApplicationContext private val c
         const val CHANNEL_SESSION = "session"
         const val CHANNEL_MESSAGES = "messages"
         const val ONGOING_ID = 1
+        private const val FIRST_MESSAGE_ID = 100
     }
 }
