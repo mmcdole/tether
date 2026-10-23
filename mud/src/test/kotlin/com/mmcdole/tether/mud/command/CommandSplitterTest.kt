@@ -34,4 +34,19 @@ class CommandSplitterTest {
     fun otherBackslashesAreKept() {
         assertEquals(listOf("say a\\b", "c\\"), CommandSplitter.split("say a\\b;c\\"))
     }
+
+    @Test
+    fun semicolonsInsideBracesAreNotSplit() {
+        assertEquals(listOf("#alias f {stand;kill %1}", "n"), CommandSplitter.split("#alias f {stand;kill %1};n"))
+    }
+
+    @Test
+    fun nestedBracesAndEscapesInsideBracesAreKept() {
+        assertEquals(listOf("#action {a} {b;{c\\;d}}", "e"), CommandSplitter.split("#action {a} {b;{c\\;d}};e"))
+    }
+
+    @Test
+    fun unmatchedCloseBraceIsLiteral() {
+        assertEquals(listOf("say }", "n"), CommandSplitter.split("say };n"))
+    }
 }
