@@ -78,8 +78,6 @@ class SessionManager @Inject constructor(
 
     // The network the connection went out on; losing it means the socket is dead.
     private var boundNetwork: Long? = null
-    private var dropReason: String? = null
-    private var lastSentAt = 0L
     private val networkBack = Channel<Unit>(Channel.CONFLATED)
 
     init {
@@ -114,7 +112,6 @@ class SessionManager @Inject constructor(
         val conn = connection ?: return@onSession
         // While the server echoes, the input is a password: not echoed, not remembered.
         val echo = !conn.serverEcho
-        lastSentAt = clock.millis()
         if (echo && input.isNotBlank() && _history.value.lastOrNull() != input) {
             _history.value = (_history.value + input).takeLast(HISTORY_SIZE)
         }
@@ -137,44 +134,49 @@ class SessionManager @Inject constructor(
 
     private fun onNetwork(event: NetworkEvent) {
         when (event) {
-            is NetworkEvent.Lost -> if (event.network == boundNetwork) {
-                dropReason = "Network lost"
-                connection?.abort()
-            }
+            is NetworkEvent.Lost -> if (event.network == boundNetwork) connection?.abort()
             is NetworkEvent.Available -> if (_state.value is SessionState.Reconnecting) networkBack.trySend(Unit)
         }
     }
 
-    /** Connects, plays until the connection ends, and reconnects after drops until told to stop. */
+    /**
+     * Connects, plays until the connection ends, and reconnects after network failures until
+     * told to stop. A server closing the connection is final: that's quit, a kick, or a reboot.
+     */
     private suspend fun run(world: World) {
         val self = currentCoroutineContext()[Job]
+        // Failed attempts since the connection was last up; 0 for the first connect.
         var attempt = 0
         while (true) {
             val conn = try {
                 MudConnection.open(socketFactory, world.host, world.port, world.tls, io)
             } catch (e: IOException) {
                 if (job !== self) return
-                if (attempt == 0) {
-                    job = null
-                    ended("Couldn't connect: ${e.reason()}")
-                    return
+                when {
+                    attempt == 0 -> return stopped("Couldn't connect: ${e.reason()}")
+                    attempt >= policy.maxAttempts -> return stopped("Couldn't reconnect")
                 }
                 attempt = retry(world, attempt + 1)
                 continue
             }
-            val drop = play(world, conn, reconnected = attempt > 0)
+            val end = play(world, conn, reconnected = attempt > 0)
             // disconnect() and connect() cancel this job and clean up themselves.
             if (job !== self) return
             closeConnection()
-            if (!drop.retry || !options.options.value.autoReconnect) {
-                job = null
-                ended(drop.message)
-                return
+            val message = when (end) {
+                ConnectionEnd.Closed -> "Disconnected"
+                is ConnectionEnd.Failed -> "Disconnected: ${end.error.reason()}"
             }
-            lines.add(LineContent(drop.message, emptyList()), LineKind.System)
+            if (end == ConnectionEnd.Closed || !options.options.value.autoReconnect) return stopped(message)
+            lines.add(LineContent(message, emptyList()), LineKind.System)
             publish()
             attempt = retry(world, 1)
         }
+    }
+
+    private fun stopped(message: String) {
+        job = null
+        ended(message)
     }
 
     private suspend fun retry(world: World, attempt: Int): Int {
@@ -183,12 +185,9 @@ class SessionManager @Inject constructor(
         return attempt
     }
 
-    private class Drop(val message: String, val retry: Boolean)
-
-    private suspend fun play(world: World, conn: MudConnection, reconnected: Boolean): Drop {
+    private suspend fun play(world: World, conn: MudConnection, reconnected: Boolean): ConnectionEnd {
         connection = conn
         boundNetwork = network.defaultNetwork()
-        dropReason = null
         login = Login(world)
         conn.setWindowSize(columns, rows)
         if (reconnected) {
@@ -202,25 +201,26 @@ class SessionManager @Inject constructor(
             coroutineScope {
                 launch { conn.runWriter() }
                 launch { conn.runKeepalive() }
-                while (true) {
-                    val received = conn.read() ?: break
-                    val echoWasOn = _serverEcho.value
-                    apply(received, conn)
-                    autoLogin(conn, received, echoTurnedOn = !echoWasOn && conn.serverEcho)
-                }
-                coroutineContext.cancelChildren()
-            }
-            val reason = dropReason
-            when {
-                reason != null -> Drop("Disconnected: $reason", retry = true)
-                // The server closing right after a command is most likely "quit".
-                clock.millis() - lastSentAt < QUIT_WINDOW_MS -> Drop("Disconnected", retry = false)
-                else -> Drop("Disconnected", retry = true)
+                readUntilEnd(conn).also { coroutineContext.cancelChildren() }
             }
         } catch (e: IOException) {
-            Drop("Disconnected: ${dropReason ?: e.reason()}", retry = true)
+            // The writer failing, as in a broken pipe.
+            ConnectionEnd.Failed(e)
         } finally {
             conn.close()
+        }
+    }
+
+    private suspend fun readUntilEnd(conn: MudConnection): ConnectionEnd {
+        while (true) {
+            when (val result = conn.read()) {
+                is Received -> {
+                    val echoWasOn = _serverEcho.value
+                    apply(result, conn)
+                    autoLogin(conn, result, echoTurnedOn = !echoWasOn && conn.serverEcho)
+                }
+                is ConnectionEnd -> return result
+            }
         }
     }
 
@@ -311,7 +311,6 @@ class SessionManager @Inject constructor(
 
     private companion object {
         const val HISTORY_SIZE = 100
-        const val QUIT_WINDOW_MS = 3_000
     }
 }
 
@@ -319,6 +318,7 @@ private fun IOException.reason(): String = when (this) {
     is UnknownHostException -> "Unknown host"
     is SocketTimeoutException -> "Timed out"
     is NoRouteToHostException -> "No route to host"
+    is NetworkLostException -> "Network lost"
     is SSLException -> "TLS error"
     is ConnectException -> if (message?.contains("refused", ignoreCase = true) != false) "Connection refused" else "Network unreachable"
     else -> message?.substringAfterLast("(")?.removeSuffix(")")?.takeIf { it.isNotBlank() } ?: "Connection lost"

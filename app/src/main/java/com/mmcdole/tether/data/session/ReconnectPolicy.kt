@@ -6,8 +6,11 @@ import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** How long to wait before each reconnect attempt. Attempts count from 1; the last delay repeats. */
-class ReconnectPolicy(private val delays: List<Duration>) {
+/**
+ * How long to wait before each reconnect attempt, and how many to make. Attempts count
+ * from 1; the last delay repeats.
+ */
+class ReconnectPolicy(private val delays: List<Duration>, val maxAttempts: Int = MAX_ATTEMPTS) {
     @Inject constructor() : this(DEFAULT)
 
     init {
@@ -24,6 +27,7 @@ class ReconnectPolicy(private val delays: List<Duration>) {
     }
 
     companion object {
+        const val MAX_ATTEMPTS = 10
         val DEFAULT = listOf(1.seconds, 2.seconds, 5.seconds, 10.seconds, 30.seconds, 60.seconds)
     }
 }

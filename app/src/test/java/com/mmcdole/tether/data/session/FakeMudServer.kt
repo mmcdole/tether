@@ -17,6 +17,10 @@ class FakeMudServer {
     @Volatile var opened = 0
         private set
 
+    /** Connection attempts, including refused ones. */
+    @Volatile var attempts = 0
+        private set
+
     /** While true, connecting fails as if the server were down. */
     @Volatile var down = false
 
@@ -24,6 +28,7 @@ class FakeMudServer {
     val refusing = MudSocketFactory { _, _, _ -> throw java.net.ConnectException("ECONNREFUSED (Connection refused)") }
 
     val factory = MudSocketFactory { host, port, tls ->
+        attempts++
         if (down) refusing.open(host, port, tls)
         if (opened++ > 0) pipe = Pipe()
         val current = pipe
@@ -34,8 +39,11 @@ class FakeMudServer {
 
     fun send(bytes: ByteArray) = pipe.queue.put(bytes)
 
-    /** Closes the newest connection from the server's end. */
+    /** Closes the newest connection cleanly from the server's end. */
     fun close() = pipe.queue.put(EOF)
+
+    /** Breaks the newest connection, as a reset or timeout would. */
+    fun reset() = pipe.queue.put(RESET)
 
     fun awaitLine(): String = fromClient.poll(2, TimeUnit.SECONDS) ?: throw AssertionError("nothing sent")
 
@@ -60,6 +68,10 @@ class FakeMudServer {
                     if (current === EOF) {
                         queue.put(EOF)
                         return -1
+                    }
+                    if (current === RESET) {
+                        queue.put(RESET)
+                        throw java.net.SocketException("Connection reset")
                     }
                 }
                 val n = minOf(len, current.size - pos)
@@ -100,5 +112,6 @@ class FakeMudServer {
 
     private companion object {
         val EOF = ByteArray(0)
+        val RESET = ByteArray(0)
     }
 }

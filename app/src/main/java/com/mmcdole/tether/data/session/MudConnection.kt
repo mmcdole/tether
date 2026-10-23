@@ -20,8 +20,23 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
-/** What one socket read produced: finished lines in order, and the unfinished text after them. */
-class Received(val lines: List<ReceivedLine>, val partial: LineContent)
+/** What one [MudConnection.read] produced. */
+sealed interface ReadResult
+
+/** Finished lines in order, and the unfinished text after them. */
+class Received(val lines: List<ReceivedLine>, val partial: LineContent) : ReadResult
+
+/** How a connection ended. */
+sealed interface ConnectionEnd : ReadResult {
+    /** The server closed the stream cleanly: quit, kicked, idled out, or rebooting. */
+    data object Closed : ConnectionEnd
+
+    /** The connection broke: reset, timeout, broken pipe, or its network went away. */
+    class Failed(val error: IOException) : ConnectionEnd
+}
+
+/** The connection's network went away, so [MudConnection.abort] closed it. */
+class NetworkLostException : IOException("Network lost")
 
 data class ReceivedLine(val content: LineContent, val prompt: Boolean)
 
@@ -48,6 +63,8 @@ class MudConnection private constructor(private val socket: MudSocket, private v
     // A GA/EOR prompt already ends its line, so a newline right after it would leave a blank line.
     private var afterPrompt = false
 
+    @Volatile private var aborted = false
+
     /** True while the server echoes for us, which means it's asking for a password. */
     val serverEcho: Boolean get() = negotiator.serverEcho
 
@@ -73,15 +90,21 @@ class MudConnection private constructor(private val socket: MudSocket, private v
         }
     }
 
-    /** Waits for one read and parses it. Null at end of stream. */
-    suspend fun read(): Received? {
-        val n = withContext(io) { socket.input.read(buffer) }
-        if (n < 0) return null
+    /** Waits for one read and parses it, or says how the connection ended. */
+    suspend fun read(): ReadResult {
+        val n = try {
+            withContext(io) { socket.input.read(buffer) }
+        } catch (e: IOException) {
+            return ConnectionEnd.Failed(if (aborted) NetworkLostException() else e)
+        }
+        // A socket closed under the read can look like a clean end of stream.
+        if (aborted) return ConnectionEnd.Failed(NetworkLostException())
+        if (n < 0) return ConnectionEnd.Closed
         lastTraffic = System.nanoTime()
         try {
             feed(buffer, 0, n)
         } catch (_: DataFormatException) {
-            throw IOException("Compression error")
+            return ConnectionEnd.Failed(IOException("Compression error"))
         }
         val result = Received(lines.toList(), assembler.peekPartial())
         lines.clear()
@@ -100,8 +123,9 @@ class MudConnection private constructor(private val socket: MudSocket, private v
 
     fun setWindowSize(columns: Int, rows: Int) = write(negotiator.setWindowSize(columns, rows))
 
-    /** Closes the socket under a blocked read, which then fails. The caller still calls [close]. */
+    /** Closes the socket under a blocked read, which then fails with [NetworkLostException]. The caller still calls [close]. */
     fun abort() {
+        aborted = true
         runCatching { socket.close() }
     }
 

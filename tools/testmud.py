@@ -4,12 +4,14 @@
     python3 tools/testmud.py [--port 4000] [--mccp] [--password secret] [--chatter 5]
 
 The emulator reaches this machine at 10.0.2.2. Commands: look, say <text>,
-flood <n>, quit. Any name works; any password works unless --password is given.
+flood <n>, quit (closes cleanly), reset (closes with a TCP reset). Any name works; any password works unless --password is given.
 """
 import argparse
 import asyncio
 import random
 import re
+import socket
+import struct
 import time
 import zlib
 
@@ -164,8 +166,14 @@ class Client:
                         if i % 200 == 0:
                             await self.writer.drain()
                 elif cmd == "quit":
-                    self.send("Bye.\r\n")
+                    self.send("Goodbye.\r\n")
                     await self.writer.drain()
+                    break
+                elif cmd == "reset":
+                    # SO_LINGER 0 turns close() into an RST, like a crashed server or a dead route.
+                    sock = self.writer.get_extra_info("socket")
+                    sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+                    print(f"{self.peer} reset")
                     break
                 elif cmd:
                     self.send("What?\r\n")

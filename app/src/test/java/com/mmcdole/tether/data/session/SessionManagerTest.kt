@@ -44,8 +44,9 @@ class SessionManagerTest {
         factory: MudSocketFactory = server.factory,
         retryDelay: Duration = 20.milliseconds,
         options: SessionOptions = SessionOptions(),
+        maxAttempts: Int = ReconnectPolicy.MAX_ATTEMPTS,
     ) = SessionManager(
-        repository, factory, network, ReconnectPolicy(listOf(retryDelay)), FixedSessionOptions(options),
+        repository, factory, network, ReconnectPolicy(listOf(retryDelay), maxAttempts), FixedSessionOptions(options),
         scope, Dispatchers.IO, Dispatchers.Default, clock,
     )
 
@@ -168,14 +169,27 @@ class SessionManagerTest {
     }
 
     @Test
-    fun serverClosingEndsTheSessionWhenAutoReconnectIsOff() = runBlocking<Unit> {
-        val manager = manager(options = SessionOptions(autoReconnect = false)).connected()
+    fun serverClosingCleanlyEndsTheSessionWithoutReconnecting() = runBlocking<Unit> {
+        val manager = manager().connected()
         server.send("HP > ")
         manager.awaitTexts("HP > ")
         server.close()
         val lines = manager.awaitTexts("HP > ", "Disconnected")
         assertEquals(LineKind.System, lines.last().kind)
         assertEquals(SessionState.Idle, manager.state.value)
+        delay(100)
+        assertEquals(SessionState.Idle, manager.state.value)
+        assertEquals(1, server.attempts)
+    }
+
+    @Test
+    fun resetEndsTheSessionWhenAutoReconnectIsOff() = runBlocking<Unit> {
+        val manager = manager(options = SessionOptions(autoReconnect = false)).connected()
+        server.reset()
+        manager.awaitTexts("Disconnected: Connection reset")
+        assertEquals(SessionState.Idle, manager.state.value)
+        delay(100)
+        assertEquals(1, server.attempts)
     }
 
     @Test
@@ -192,7 +206,7 @@ class SessionManagerTest {
     }
 
     @Test
-    fun serverCloseReconnectsReplaysAutoLoginAndKeepsScrollbackAndHistory() = runBlocking<Unit> {
+    fun resetReconnectsReplaysAutoLoginAndKeepsScrollbackAndHistory() = runBlocking<Unit> {
         val id = repository.save(plainWorld.copy(id = 0, username = "drake"), PasswordEdit.Set("hunter2"))
         val world = repository.get(id)!!
         val manager = manager().connected(world)
@@ -203,7 +217,7 @@ class SessionManagerTest {
         manager.awaitLines { lines -> lines.any { it.text == "A dark room." } }
         clock.advance(10.seconds)
 
-        server.close()
+        server.reset()
         assertEquals(SessionState.Reconnecting(world, 1), manager.awaitState { it is SessionState.Reconnecting })
         manager.awaitState { it is SessionState.Connected }
         assertEquals(2, server.opened)
@@ -211,7 +225,7 @@ class SessionManagerTest {
 
         val lines = manager.scrollback.value.lines
         val texts = lines.map { it.text }
-        val dropped = texts.indexOf("Disconnected")
+        val dropped = texts.indexOf("Disconnected: Connection reset")
         assertTrue("old lines kept", texts.indexOf("A dark room.") in 0 until dropped)
         assertEquals("Reconnected", texts[dropped + 1])
         assertEquals(LineKind.System, lines[dropped + 1].kind)
@@ -219,39 +233,46 @@ class SessionManagerTest {
     }
 
     @Test
-    fun serverClosingRightAfterACommandIsTakenAsQuit() = runBlocking<Unit> {
-        val manager = manager().connected()
-        manager.send("quit")
-        assertEquals("quit", server.awaitLine())
-        server.close()
-        manager.awaitTexts("quit", "Disconnected")
-        assertEquals(SessionState.Idle, manager.state.value)
-        delay(100)
-        assertEquals(1, server.opened)
-    }
-
-    @Test
     fun failedAttemptsKeepRetryingUntilTheServerIsBack() = runBlocking<Unit> {
         val manager = manager().connected()
         server.down = true
-        server.close()
+        server.reset()
         manager.awaitState { it is SessionState.Reconnecting && it.attempt >= 3 }
         server.down = false
         manager.awaitState { it is SessionState.Connected }
-        assertEquals(listOf("Disconnected", "Reconnected"), manager.scrollback.value.lines.map { it.text })
+        assertEquals(listOf("Disconnected: Connection reset", "Reconnected"), manager.scrollback.value.lines.map { it.text })
+    }
+
+    @Test
+    fun givesUpAfterTenFailedAttemptsAndASuccessResetsTheCount() = runBlocking<Unit> {
+        val manager = manager(retryDelay = 10.milliseconds).connected()
+        server.down = true
+        server.reset()
+        manager.awaitState { it is SessionState.Reconnecting && it.attempt >= 5 }
+        server.down = false
+        manager.awaitState { it is SessionState.Connected }
+
+        val before = server.attempts
+        server.down = true
+        server.reset()
+        manager.awaitLines { it.lastOrNull()?.text == "Couldn't reconnect" }
+        assertEquals(SessionState.Idle, manager.state.value)
+        assertEquals(10, server.attempts - before)
+        delay(100)
+        assertEquals(SessionState.Idle, manager.state.value)
     }
 
     @Test
     fun userDisconnectDuringBackoffCancelsReconnecting() = runBlocking<Unit> {
         val manager = manager(retryDelay = 1.seconds).connected()
-        server.close()
+        server.reset()
         manager.awaitState { it is SessionState.Reconnecting }
         manager.disconnect()
         manager.awaitState { it == SessionState.Idle }
         delay(1_500)
         assertEquals(SessionState.Idle, manager.state.value)
         assertEquals(1, server.opened)
-        assertEquals(listOf("Disconnected", "Disconnected"), manager.scrollback.value.lines.map { it.text })
+        assertEquals(listOf("Disconnected: Connection reset", "Disconnected"), manager.scrollback.value.lines.map { it.text })
     }
 
     @Test
