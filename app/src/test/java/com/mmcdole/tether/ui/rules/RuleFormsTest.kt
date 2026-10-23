@@ -71,6 +71,7 @@ class RuleFormsTest {
         assertTrue(form.advanced)
         assertEquals(trigger, form.toTrigger())
         assertFalse(TriggerForm.of(Trigger(1, world, "x", gag = true)).advanced)
+        assertFalse(TriggerForm.of(Trigger(1, world, "x", send = "kill %1", notify = true, replyTemplate = "tell %1")).advanced)
     }
 
     @Test

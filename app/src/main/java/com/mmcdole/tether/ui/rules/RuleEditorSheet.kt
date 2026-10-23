@@ -79,6 +79,7 @@ private fun TriggerFields(form: TriggerForm, world: WorldOption?, viewModel: Rul
         error = form.patternError,
         visualTransformation = WildcardTransformation(!form.isRegex),
     )
+    SheetField("Send command", form.send, { v -> update { it.copy(send = v) } }, placeholder = "kill %1")
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         SheetLabel("Actions")
@@ -114,14 +115,16 @@ private fun TriggerFields(form: TriggerForm, world: WorldOption?, viewModel: Rul
         }
     }
 
+    AnimatedVisibility(form.notify) {
+        SheetField("Reply template", form.replyTemplate, { v -> update { it.copy(replyTemplate = v) } }, placeholder = "tell %1")
+    }
+
     AppliesTo(form.scope, world) { s -> update { it.copy(scope = s) } }
 
     AnimatedVisibility(form.advanced) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            SheetField("Send command", form.send, { v -> update { it.copy(send = v) } }, placeholder = "kill %1")
             SwitchRow("Regex", form.isRegex) { v -> update { it.copy(isRegex = v) } }
             if (form.notify) {
-                SheetField("Reply template", form.replyTemplate, { v -> update { it.copy(replyTemplate = v) } }, placeholder = "tell %1")
                 SwitchRow("Require unlock", form.replyRequiresUnlock) { v -> update { it.copy(replyRequiresUnlock = v) } }
             }
         }

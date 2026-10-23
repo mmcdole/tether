@@ -117,8 +117,7 @@ data class TriggerForm(
             replyRequiresUnlock = t.replyRequiresUnlock,
             enabled = t.enabled,
             // Open Advanced when something in it is set, so nothing is hidden while editing.
-            advanced = t.isRegex || !t.send.isNullOrBlank() ||
-                t.replyTemplate != null || !t.replyRequiresUnlock,
+            advanced = t.isRegex || !t.replyRequiresUnlock,
         )
     }
 }
