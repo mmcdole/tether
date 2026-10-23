@@ -2,6 +2,7 @@ package com.mmcdole.tether.ui.worlds
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.mmcdole.tether.data.rules.RuleRepository
 import com.mmcdole.tether.data.session.SessionManager
 import com.mmcdole.tether.data.session.SessionState
 import com.mmcdole.tether.data.session.activeWorld
@@ -22,6 +23,8 @@ data class WorldsUiState(
     val active: ActiveWorld? = null,
     /** Every other world. */
     val worlds: List<WorldRow> = emptyList(),
+    val globalTriggers: Int = 0,
+    val globalAliases: Int = 0,
 )
 
 enum class ActiveStatus { Connecting, Connected, Reconnecting }
@@ -38,12 +41,13 @@ data class WorldRow(
 @HiltViewModel
 class WorldsViewModel @Inject constructor(
     repository: WorldRepository,
+    rules: RuleRepository,
     private val session: SessionManager,
     private val clock: Clock,
 ) : ViewModel() {
     private var worlds = emptyList<World>()
 
-    val state: StateFlow<WorldsUiState> = combine(repository.worlds, session.state) { worlds, state ->
+    val state: StateFlow<WorldsUiState> = combine(repository.worlds, session.state, rules.observeRules(null)) { worlds, state, global ->
         this.worlds = worlds
         val active = state.activeWorld
         WorldsUiState(
@@ -60,6 +64,8 @@ class WorldsViewModel @Inject constructor(
                 )
             },
             worlds = worlds.filter { it.id != active?.id }.map { it.toRow() },
+            globalTriggers = global.globalTriggers.size,
+            globalAliases = global.globalAliases.size,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), WorldsUiState())
 

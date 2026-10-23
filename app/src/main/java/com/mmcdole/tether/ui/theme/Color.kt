@@ -18,4 +18,15 @@ object TetherColors {
     val Pending = Color(0xFFE5C07B)
     val Danger = Color(0xFFFF7B72)
     val DangerBorder = Color(0xFF6B2E2B)
+
+    // Rules screen: the world box is neutral, the All worlds box is tinted blue.
+    val BoxHeader = Color(0xFF121317)
+    val Tag = Color(0xFF24262C)
+    val GlobalBox = Color(0xFF0B0F17)
+    val GlobalHeader = Color(0xFF111A2A)
+    val GlobalBorder = Color(0xFF26334D)
+    val GlobalLine = Color(0xFF1C2638)
+    val GlobalAdd = Color(0xFF22314F)
+    val Selected = Color(0xFF24324F)
+    val SelectedBorder = Color(0xFF3D5891)
 }

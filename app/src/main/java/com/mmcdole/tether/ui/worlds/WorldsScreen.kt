@@ -3,6 +3,7 @@ package com.mmcdole.tether.ui.worlds
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -64,6 +65,7 @@ fun WorldsScreen(
     onWorldLongClick: (Long) -> Unit,
     onAddWorld: () -> Unit,
     onSettings: () -> Unit,
+    onGlobalRules: () -> Unit,
     viewModel: WorldsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -104,6 +106,7 @@ fun WorldsScreen(
                     Icon(Icons.Outlined.Settings, contentDescription = "Settings", tint = TetherColors.TextDim)
                 }
             }
+            if (!state.loading) GlobalRulesRow(state.globalTriggers, state.globalAliases, onGlobalRules)
             val active = state.active
             when {
                 state.loading -> Unit
@@ -266,5 +269,30 @@ private fun WorldItem(world: WorldRow, onClick: () -> Unit, onLongClick: () -> U
             overflow = TextOverflow.Ellipsis,
         )
         world.lastPlayed?.let { Text(it, fontSize = 13.sp, color = TetherColors.TextDim) }
+    }
+}
+
+@Composable
+private fun GlobalRulesRow(triggers: Int, aliases: Int, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(10.dp)
+    Row(
+        Modifier
+            .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 8.dp)
+            .fillMaxWidth()
+            .clip(shape)
+            .border(1.dp, TetherColors.Line, shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("Global rules", fontSize = 16.sp)
+            Text(
+                "$triggers ${if (triggers == 1) "trigger" else "triggers"} · $aliases ${if (aliases == 1) "alias" else "aliases"}",
+                fontSize = 13.sp,
+                color = TetherColors.TextDim,
+            )
+        }
+        Text("›", fontSize = 22.sp, color = TetherColors.TextDim)
     }
 }

@@ -15,3 +15,7 @@ data object SessionRoute
 
 @Serializable
 data object SettingsRoute
+
+/** Rules for one world plus the global ones. A null [worldId] shows only the global rules. */
+@Serializable
+data class RulesRoute(val worldId: Long? = null)

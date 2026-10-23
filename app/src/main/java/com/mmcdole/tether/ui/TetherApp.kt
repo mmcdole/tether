@@ -6,6 +6,8 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
+import com.mmcdole.tether.ui.rules.RulesScreen
 import com.mmcdole.tether.ui.session.SessionScreen
 import com.mmcdole.tether.ui.settings.SettingsScreen
 import com.mmcdole.tether.ui.theme.TetherTheme
@@ -26,11 +28,19 @@ fun TetherApp(openSession: Flow<Unit>) {
                     onWorldLongClick = { navController.navigate(WorldEditRoute(it)) },
                     onAddWorld = { navController.navigate(WorldEditRoute()) },
                     onSettings = { navController.navigate(SettingsRoute) },
+                    onGlobalRules = { navController.navigate(RulesRoute()) },
                 )
             }
-            composable<WorldEditRoute> {
+            composable<WorldEditRoute> { entry ->
+                val id = entry.toRoute<WorldEditRoute>().id
                 // Popping to Worlds is idempotent, so a back press racing a save can't pop twice.
-                WorldEditScreen(onDone = { navController.popBackStack(WorldsRoute, inclusive = false) })
+                WorldEditScreen(
+                    onDone = { navController.popBackStack(WorldsRoute, inclusive = false) },
+                    onRules = id?.let { { navController.navigate(RulesRoute(it)) } },
+                )
+            }
+            composable<RulesRoute> {
+                RulesScreen(onBack = { navController.popBackStack<RulesRoute>(inclusive = true) })
             }
             composable<SessionRoute> {
                 SessionScreen(

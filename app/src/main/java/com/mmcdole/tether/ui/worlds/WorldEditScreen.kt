@@ -60,7 +60,7 @@ import com.mmcdole.tether.ui.theme.TetherColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WorldEditScreen(onDone: () -> Unit, viewModel: WorldEditViewModel = hiltViewModel()) {
+fun WorldEditScreen(onDone: () -> Unit, onRules: (() -> Unit)?, viewModel: WorldEditViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
     val username = remember { FocusRequester() }
@@ -79,6 +79,9 @@ fun WorldEditScreen(onDone: () -> Unit, viewModel: WorldEditViewModel = hiltView
                     }
                 },
                 actions = {
+                    onRules?.let {
+                        TextButton(onClick = it) { Text("Rules", fontSize = 16.sp, color = TetherColors.Text) }
+                    }
                     TextButton(onClick = viewModel::save, enabled = !state.loading && !state.saving) {
                         Text("Save", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = TetherColors.AccentText)
                     }
