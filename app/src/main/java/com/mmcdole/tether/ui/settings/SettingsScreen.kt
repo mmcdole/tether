@@ -1,5 +1,8 @@
 package com.mmcdole.tether.ui.settings
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +28,9 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -33,6 +39,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,9 +70,21 @@ import kotlin.math.roundToInt
 @Composable
 fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val message by viewModel.message.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(message) {
+        // Cleared only after it's shown; clearing first would change the key and cancel this effect.
+        message?.let {
+            snackbar.showSnackbar(it)
+            viewModel.messageShown()
+        }
+    }
     Scaffold(
         containerColor = TetherColors.Background,
         contentWindowInsets = WindowInsets.safeDrawing,
+        snackbarHost = {
+            SnackbarHost(snackbar) { Snackbar(it, containerColor = TetherColors.SurfaceRaised, contentColor = TetherColors.Text) }
+        },
         topBar = {
             TopAppBar(
                 title = { Text("Settings", fontSize = 18.sp, fontWeight = FontWeight.SemiBold) },
@@ -106,6 +125,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
 
             Section("Data")
             Scrollback(settings.scrollbackLines, viewModel::setScrollbackLines)
+            RulesFile(viewModel::exportFileName, viewModel::exportRules, viewModel::importRules)
         }
     }
 }
@@ -257,6 +277,54 @@ private fun Scrollback(lines: Int, onChange: (Int) -> Unit) {
         containerColor = TetherColors.SurfaceRaised,
         titleContentColor = TetherColors.Text,
         textContentColor = TetherColors.Text,
+    )
+}
+
+@Composable
+private fun RulesFile(fileName: () -> String, onExport: (Uri) -> Unit, onImport: (Uri) -> Unit) {
+    var choosing by remember { mutableStateOf(false) }
+    val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        uri?.let(onExport)
+    }
+    val import = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let(onImport)
+    }
+    SettingRow("Export / import rules", Modifier.clickable { choosing = true }) { Value("›") }
+    if (!choosing) return
+    AlertDialog(
+        onDismissRequest = { choosing = false },
+        title = { Text("Rules") },
+        text = {
+            Column {
+                DialogChoice("Export") {
+                    choosing = false
+                    export.launch(fileName())
+                }
+                DialogChoice("Import") {
+                    choosing = false
+                    // Some file managers don't tag .json files as application/json.
+                    import.launch(arrayOf("application/json", "*/*"))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { choosing = false }) { Text("Cancel", color = TetherColors.Text) }
+        },
+        containerColor = TetherColors.SurfaceRaised,
+        titleContentColor = TetherColors.Text,
+        textContentColor = TetherColors.Text,
+    )
+}
+
+@Composable
+private fun DialogChoice(label: String, onClick: () -> Unit) {
+    Text(
+        label,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(vertical = 14.dp),
+        fontSize = 16.sp,
     )
 }
 

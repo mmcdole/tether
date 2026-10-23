@@ -113,6 +113,6 @@ class RuleJsonTest {
     fun rejectsNonRulesJson() = runTest {
         val device = Device(clock)
         assertThrows(IllegalArgumentException::class.java) { runBlocking { device.json.import("[1, 2]") } }
-        assertThrows(IllegalArgumentException::class.java) { runBlocking { device.json.import("""{"version": 99}""") } }
+        assertThrows(NewerRulesFileException::class.java) { runBlocking { device.json.import("""{"version": 99}""") } }
     }
 }

@@ -20,6 +20,9 @@ data class ImportSummary(
     val unknownWorlds: List<String>,
 )
 
+/** A rules file written by a newer version of the app. */
+class NewerRulesFileException(version: Int) : IllegalArgumentException("Rules file version $version is newer than this app")
+
 /** Exports and imports every rule as JSON, naming worlds instead of using their ids. Doesn't touch files. */
 @Singleton
 class RuleJson @Inject constructor(
@@ -47,7 +50,7 @@ class RuleJson @Inject constructor(
      */
     suspend fun import(json: String): ImportSummary {
         val file = format.decodeFromString(RulesFile.serializer(), json)
-        require(file.version <= VERSION) { "Rules file version ${file.version} is newer than this app" }
+        if (file.version > VERSION) throw NewerRulesFileException(file.version)
         val idByName = HashMap<String, Long>()
         worlds.observeAll().first().forEach { idByName.putIfAbsent(it.name, it.id) }
 
