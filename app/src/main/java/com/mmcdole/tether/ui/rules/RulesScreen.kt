@@ -306,26 +306,17 @@ private fun RuleItem(row: RuleRow, onClick: () -> Unit, onLongClick: () -> Unit,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Row(Modifier.alpha(if (row.enabled) 1f else 0.6f), verticalAlignment = Alignment.CenterVertically) {
-                row.group?.let { GroupTag(it) }
-                Text(row.summary, fontSize = 13.sp, color = TetherColors.TextDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
+            Text(
+                row.summary,
+                modifier = Modifier.alpha(if (row.enabled) 1f else 0.6f),
+                fontSize = 13.sp,
+                color = TetherColors.TextDim,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
         Spacer(Modifier.width(8.dp))
         RuleSwitch(row.enabled, onToggle)
     }
 }
 
-@Composable
-private fun GroupTag(name: String) {
-    Text(
-        name,
-        modifier = Modifier
-            .padding(end = 6.dp)
-            .background(TetherColors.Tag, RoundedCornerShape(4.dp))
-            .padding(horizontal = 6.dp, vertical = 1.dp),
-        fontSize = 11.sp,
-        color = TetherColors.TextDim,
-        maxLines = 1,
-    )
-}

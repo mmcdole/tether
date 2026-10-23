@@ -33,7 +33,6 @@ data class RuleRow(
     /** The pattern, or the alias name. */
     val title: String,
     val summary: String,
-    val group: String?,
     val enabled: Boolean,
 )
 
@@ -281,6 +280,6 @@ class RulesViewModel internal constructor(
         if (scopes.size == 1) scopeName(scopes.single()) else "${scopes.size} worlds"
 }
 
-private fun Trigger.toRow() = RuleRow(id, scope, pattern, summary(), group, enabled)
+private fun Trigger.toRow() = RuleRow(id, scope, pattern, summary(), enabled)
 
-private fun Alias.toRow() = RuleRow(id, scope, name, summary(), group, enabled)
+private fun Alias.toRow() = RuleRow(id, scope, name, summary(), enabled)

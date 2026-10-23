@@ -121,18 +121,14 @@ private fun TriggerFields(form: TriggerForm, world: WorldOption?, viewModel: Rul
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             SheetField("Send command", form.send, { v -> update { it.copy(send = v) } }, placeholder = "kill %1")
             SwitchRow("Regex", form.isRegex) { v -> update { it.copy(isRegex = v) } }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                SheetField("Group", form.group, { v -> update { it.copy(group = v) } }, Modifier.weight(1f), mono = false)
-                SheetField(
-                    "Priority",
-                    form.priority,
-                    { v -> update { it.copy(priority = v) } },
-                    Modifier.weight(0.6f),
-                    accept = { v -> v.takeIf { it.isPriorityInput() } },
-                    placeholder = "0",
-                    keyboardType = KeyboardType.Number,
-                )
-            }
+            SheetField(
+                "Priority",
+                form.priority,
+                { v -> update { it.copy(priority = v) } },
+                accept = { v -> v.takeIf { it.isPriorityInput() } },
+                placeholder = "0",
+                keyboardType = KeyboardType.Number,
+            )
             if (form.notify) {
                 SheetField("Reply template", form.replyTemplate, { v -> update { it.copy(replyTemplate = v) } }, placeholder = "tell %1")
                 SwitchRow("Require unlock", form.replyRequiresUnlock) { v -> update { it.copy(replyRequiresUnlock = v) } }
@@ -162,7 +158,6 @@ private fun AliasFields(form: AliasForm, world: WorldOption?, viewModel: RulesVi
     )
     SheetField("Expansion", form.expansion, { v -> update { it.copy(expansion = v) } }, placeholder = "kill %1")
     AppliesTo(form.scope, world) { s -> update { it.copy(scope = s) } }
-    SheetField("Group", form.group, { v -> update { it.copy(group = v) } }, mono = false)
     Buttons(advanced = null, onAdvanced = {}, canSave = form.canSave, onSave = viewModel::save)
 }
 

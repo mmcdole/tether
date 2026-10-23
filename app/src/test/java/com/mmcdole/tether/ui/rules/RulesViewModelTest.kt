@@ -72,7 +72,6 @@ class RulesViewModelTest {
         assertEquals(2, state.triggerCount)
         assertEquals(1, state.aliasCount)
         assertEquals(listOf("Highlight red · vibrate"), state.worldRows.map { it.summary })
-        assertEquals("Combat", state.worldRows.single().group)
         assertEquals(listOf("eat bread"), state.globalRows.map { it.summary })
 
         vm.selectTab(RuleTab.Aliases)
