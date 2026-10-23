@@ -1,0 +1,907 @@
+<title>Tether MUD Client</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..800&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+/* Layout: a single reading column for the plan, broken by a wide gallery of phone mockups; the phones are always black because the app is. */
+:root {
+  --bg: #f3f4f6;
+  --surface: #ffffff;
+  --ink: #16181d;
+  --muted: #5b6170;
+  --rule: #d9dce3;
+  --accent: #2b55c9;
+  --accent-soft: #e3e9fb;
+  --frame: #26282e;
+  --note: #8a5a00;
+  --note-bg: #fff4dc;
+
+  /* the app's own look: fixed in both page themes */
+  --term-bg: #000000;
+  --term-fg: #e6e6e6;
+  --term-dim: #8b8f98;
+  --term-chrome: #0d0e10;
+  --term-line: #23252b;
+  --kb-bg: #1b1c1f;
+  --kb-key: #3a3c42;
+  --kb-key-alt: #2a2c31;
+  --kb-fg: #e8e9ec;
+  --sheet: #17181b;
+  --a-red: #e5534b; --a-green: #57c46b; --a-yellow: #e5c07b; --a-blue: #61afef;
+  --a-magenta: #c678dd; --a-cyan: #56b6c2; --a-white: #dcdcdc; --a-black: #4b4f57;
+  --a-bred: #ff7b72; --a-bgreen: #7ee787; --a-byellow: #ffe08a; --a-bblue: #8cc8ff;
+  --a-bmagenta: #e2a6f5; --a-bcyan: #8be3ee; --a-bwhite: #ffffff; --a-bblack: #7a7f89;
+
+  --f-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111318; --surface: #191c22; --ink: #e8eaef; --muted: #9aa1b0; --rule: #2c313b;
+    --accent: #86a6ff; --accent-soft: #1f2a48; --frame: #3a3e47; --note: #f2c46b; --note-bg: #2e2410;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111318; --surface: #191c22; --ink: #e8eaef; --muted: #9aa1b0; --rule: #2c313b;
+  --accent: #86a6ff; --accent-soft: #1f2a48; --frame: #3a3e47; --note: #f2c46b; --note-bg: #2e2410;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--f-body); font-size: 17px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 80px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 64px; }
+.col { max-width: 760px; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(2.2rem, 5vw, 3.4rem); font-weight: 800; font-stretch: 112%; letter-spacing: -0.01em; }
+h2 { font-size: 1.65rem; font-weight: 750; font-stretch: 105%; }
+h3 { font-size: 1.1rem; font-weight: 700; }
+p { margin: 0; }
+code, .mono { font-family: var(--f-mono); font-size: 0.86em; }
+.eyebrow { font-family: var(--f-mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+section { display: flex; flex-direction: column; gap: 20px; }
+.lede { font-size: 1.2rem; color: var(--muted); max-width: 62ch; }
+.stack { display: flex; flex-direction: column; gap: 12px; }
+.status-pill { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; padding: 4px 12px; border-radius: 999px; background: var(--note-bg); color: var(--note); font-weight: 600; font-size: 0.9rem; }
+.status-pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+a { color: var(--accent); }
+
+/* requirement table */
+.req { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+.req th, .req td { text-align: left; vertical-align: top; padding: 16px 18px; border-bottom: 1px solid var(--rule); }
+.req tr:last-child td { border-bottom: 0; }
+.req th { font-family: var(--f-mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 400; background: var(--bg); }
+.req td:first-child { width: 32%; font-style: italic; color: var(--muted); }
+.req td strong { display: block; font-style: normal; color: var(--ink); font-weight: 600; margin-bottom: 2px; }
+.table-scroll { overflow-x: auto; }
+@media (max-width: 640px) {
+  .req, .req tbody, .req tr, .req td { display: block; width: 100% !important; }
+  .req thead { display: none; }
+  .req td:first-child { border-bottom: 0; padding-bottom: 4px; }
+}
+
+/* gallery */
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 44px 28px; }
+figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 14px; min-width: 0; }
+figcaption { max-width: 290px; font-size: 0.95rem; color: var(--muted); }
+figcaption b { display: block; color: var(--ink); font-family: var(--f-display); font-size: 1rem; margin-bottom: 2px; }
+
+.phone {
+  width: 272px; max-width: 100%; height: 566px; background: var(--term-bg);
+  border: 9px solid var(--frame); border-radius: 36px; overflow: hidden;
+  display: flex; flex-direction: column; position: relative;
+  font-family: var(--f-mono); color: var(--term-fg);
+}
+.sbar { height: 24px; flex: none; display: flex; justify-content: space-between; align-items: center; padding: 0 16px; font-family: var(--f-body); font-size: 11px; color: var(--term-fg); }
+.sbar .dots { letter-spacing: 2px; }
+.appbar { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--term-line); font-family: var(--f-body); font-size: 12.5px; }
+.appbar .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--a-green); flex: none; }
+.appbar .wname { font-weight: 600; }
+.appbar .meta { color: var(--term-dim); font-size: 11px; }
+.appbar .icons { margin-left: auto; display: flex; gap: 14px; color: var(--term-dim); }
+.appbar svg { width: 15px; height: 15px; display: block; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.out { flex: 1; min-height: 0; overflow: hidden; padding: 6px 10px; font-size: 9.6px; line-height: 1.42; white-space: pre-wrap; word-break: break-word; display: flex; flex-direction: column; justify-content: flex-end; }
+.out div { min-height: 1.42em; }
+.in { flex: none; display: flex; align-items: center; gap: 8px; margin: 6px 8px; padding: 8px 10px; border: 1px solid var(--term-line); border-radius: 8px; font-size: 10.5px; background: var(--term-chrome); }
+.in .ph { color: var(--term-dim); }
+.caret { display: inline-block; width: 1px; height: 12px; background: var(--term-fg); vertical-align: -2px; margin-left: 1px; }
+.gest { flex: none; height: 16px; display: grid; place-items: center; }
+.gest::after { content: ""; width: 90px; height: 4px; border-radius: 2px; background: var(--term-dim); opacity: .7; }
+
+/* ansi */
+.r{color:var(--a-red)} .g{color:var(--a-green)} .y{color:var(--a-yellow)} .b{color:var(--a-blue)} .m{color:var(--a-magenta)} .c{color:var(--a-cyan)} .w{color:var(--a-white)}
+.R{color:var(--a-bred)} .G{color:var(--a-bgreen)} .Y{color:var(--a-byellow)} .B{color:var(--a-bblue)} .M{color:var(--a-bmagenta)} .C{color:var(--a-bcyan)} .W{color:var(--a-bwhite)}
+.bold{font-weight:700} .dim{color:var(--term-dim)} .ul{text-decoration:underline}
+.hl { background: rgba(229, 83, 75, .22); }
+.echo { color: var(--a-cyan); }
+.press { background: rgba(140, 200, 255, .18); outline: 1px solid rgba(140, 200, 255, .5); border-radius: 2px; }
+
+/* keyboard */
+.kb { flex: none; background: var(--kb-bg); padding: 6px 4px 2px; display: flex; flex-direction: column; gap: 6px; font-family: var(--f-body); }
+.kb .sugg { height: 22px; display: flex; justify-content: center; align-items: center; color: var(--term-dim); font-size: 10px; gap: 20px; }
+.kb .row { display: flex; gap: 4px; justify-content: center; }
+.kb .k { flex: 1; max-width: 22px; height: 30px; border-radius: 5px; background: var(--kb-key); color: var(--kb-fg); display: grid; place-items: center; font-size: 12px; }
+.kb .k.wide { max-width: 34px; background: var(--kb-key-alt); font-size: 9px; }
+.kb .k.space { max-width: none; flex: 5; }
+.kb .k.send { max-width: 34px; background: #4b7cf0; color: #fff; }
+.kb .tag { text-align: center; font-size: 9px; color: var(--term-dim); letter-spacing: .06em; text-transform: uppercase; padding-bottom: 2px; }
+
+/* sheet + list ui inside phone */
+.scrim { position: absolute; inset: 0; background: rgba(0,0,0,.45); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--sheet); border-radius: 18px 18px 0 0; padding: 10px 14px 22px; display: flex; flex-direction: column; gap: 9px; font-family: var(--f-body); font-size: 11.5px; border-top: 1px solid var(--term-line); }
+.sheet .grab { width: 34px; height: 4px; border-radius: 2px; background: var(--term-dim); align-self: center; opacity: .6; }
+.sheet h4 { margin: 0; font-size: 14px; font-weight: 600; }
+.lbl { font-size: 9.5px; color: var(--term-dim); text-transform: uppercase; letter-spacing: .07em; }
+.field { border: 1px solid var(--term-line); border-radius: 6px; padding: 7px 9px; font-family: var(--f-mono); font-size: 10.5px; background: var(--term-bg); }
+.field .wild { color: var(--a-byellow); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { padding: 4px 9px; border: 1px solid var(--term-line); border-radius: 999px; font-size: 10.5px; color: var(--term-fg); }
+.chip.on { background: #24324f; border-color: #3d5891; color: var(--a-bblue); }
+.btnrow { display: flex; justify-content: flex-end; gap: 10px; margin-top: 2px; }
+.btn { padding: 7px 14px; border-radius: 999px; font-size: 11.5px; font-weight: 600; }
+.btn.text { color: var(--a-bblue); }
+.btn.fill { background: #4b7cf0; color: #fff; }
+
+.tabs { flex: none; display: flex; font-family: var(--f-body); font-size: 12px; border-bottom: 1px solid var(--term-line); }
+.tabs span { flex: 1; text-align: center; padding: 9px 0; color: var(--term-dim); }
+.tabs span.on { color: var(--term-fg); box-shadow: inset 0 -2px 0 var(--a-bblue); font-weight: 600; }
+.list { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--term-line); }
+.item .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.item .pat { font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item .act { font-family: var(--f-body); font-size: 10.5px; color: var(--term-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item.off .pat { color: var(--term-dim); }
+.sw { flex: none; width: 28px; height: 16px; border-radius: 999px; background: #3b3e45; position: relative; }
+.sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #9aa0aa; }
+.sw.on { background: #3d5891; }
+.sw.on::after { left: 14px; background: var(--a-bblue); }
+.group { padding: 10px 14px 4px; font-family: var(--f-body); font-size: 9.5px; color: var(--term-dim); text-transform: uppercase; letter-spacing: .08em; }
+.fab { position: absolute; right: 16px; bottom: 30px; width: 44px; height: 44px; border-radius: 14px; background: #4b7cf0; color: #fff; display: grid; place-items: center; font-family: var(--f-body); font-size: 24px; line-height: 1; }
+
+.world { display: flex; flex-direction: column; gap: 3px; padding: 14px; border-bottom: 1px solid var(--term-line); font-family: var(--f-body); }
+.world .n { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.world .h { font-family: var(--f-mono); font-size: 10px; color: var(--term-dim); }
+.world .s { font-size: 10.5px; color: var(--a-green); }
+.title-big { padding: 14px 14px 8px; font-family: var(--f-body); font-size: 19px; font-weight: 600; }
+
+.lock { flex: 1; display: flex; flex-direction: column; gap: 8px; padding: 26px 12px 0; font-family: var(--f-body); }
+.lock .clock { font-size: 54px; font-weight: 300; text-align: center; letter-spacing: -1px; line-height: 1; }
+.lock .date { text-align: center; font-size: 11.5px; color: var(--term-dim); margin-bottom: 18px; }
+.notif { background: #1d1f24; border-radius: 16px; padding: 11px 13px; display: flex; flex-direction: column; gap: 4px; font-size: 11px; }
+.notif .hd { display: flex; gap: 6px; align-items: center; font-size: 9.5px; color: var(--term-dim); }
+.notif .hd i { width: 14px; height: 14px; border-radius: 50%; background: #4b7cf0; display: inline-block; }
+.notif .t { font-size: 12px; font-weight: 600; }
+.notif .acts { display: flex; gap: 16px; margin-top: 4px; color: var(--a-bblue); font-weight: 600; font-size: 10.5px; }
+.notif .body { color: #c6c9d0; font-family: var(--f-mono); font-size: 9.6px; }
+
+/* v2 additions */
+.in.one { overflow: hidden; justify-content: flex-end; position: relative; white-space: nowrap; }
+.in.one::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 22px; background: linear-gradient(90deg, var(--term-chrome), transparent); z-index: 1; }
+.in.one span { flex: none; }
+.dbtn { align-self: flex-start; margin-top: 6px; padding: 5px 12px; border-radius: 999px; border: 1px solid #6b2e2b; color: var(--a-bred); font-size: 10.5px; font-weight: 600; font-family: var(--f-body); }
+.world .row2 { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.globalrow { display: flex; align-items: center; justify-content: space-between; margin: 4px 12px 8px; padding: 10px 12px; border: 1px solid var(--term-line); border-radius: 10px; font-family: var(--f-body); font-size: 11.5px; }
+.globalrow .sub { font-size: 10px; color: var(--term-dim); }
+.scopehd { display: flex; justify-content: space-between; align-items: baseline; padding: 10px 14px 4px; font-family: var(--f-body); font-size: 9.5px; color: var(--term-dim); text-transform: uppercase; letter-spacing: .08em; }
+.scopehd b { color: var(--a-bblue); font-weight: 600; }
+.tagg { font-family: var(--f-body); font-size: 9px; padding: 1px 6px; border-radius: 4px; background: #24262c; color: var(--term-dim); margin-right: 4px; }
+.pinch { position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%); background: rgba(30,32,38,.94); border: 1px solid var(--term-line); border-radius: 14px; padding: 10px 16px; font-family: var(--f-body); text-align: center; display: flex; flex-direction: column; gap: 2px; }
+.pinch .big { font-size: 18px; font-weight: 600; }
+.pinch .small { font-size: 10px; color: var(--term-dim); }
+.finger { position: absolute; width: 34px; height: 34px; border-radius: 50%; border: 2px solid rgba(140,200,255,.6); background: rgba(140,200,255,.12); }
+.changes { background: var(--note-bg); border-radius: 10px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; }
+.changes h3 { color: var(--note); }
+.changes ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+
+/* draft 3: rules sections, live world card, inline reply */
+.list.scoped { padding: 10px 10px 0; gap: 14px; }
+.scope { border: 1px solid var(--term-line); border-radius: 12px; overflow: hidden; flex: none; }
+.scope.global { background: #0b0f17; border-color: #26334d; }
+.scope-hd { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; background: #121317; border-bottom: 1px solid var(--term-line); font-family: var(--f-body); }
+.scope.global .scope-hd { background: #111a2a; border-bottom-color: #26334d; }
+.scope-hd > div { display: flex; align-items: baseline; gap: 6px; }
+.scope-t { display: flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: var(--term-fg); }
+.scope-t svg { width: 12px; height: 12px; fill: none; stroke: var(--a-bblue); stroke-width: 1.8; }
+.scope-s { font-size: 9.5px; color: var(--term-dim); }
+.scope-add { width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; background: #24262c; color: var(--term-fg); font-family: var(--f-body); font-size: 16px; line-height: 1; }
+.scope.global .scope-add { background: #22314f; color: var(--a-bblue); }
+.scope .item { padding: 9px 12px; }
+.scope .item:last-child { border-bottom: 0; }
+.scope.global .item { border-bottom-color: #1c2638; }
+
+.live { margin: 0 12px; border: 1px solid #24432b; background: #0c140e; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; font-family: var(--f-body); }
+.live-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.txt2 { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.n2 { font-size: 13px; font-weight: 600; }
+.live .h { font-family: var(--f-mono); font-size: 10px; color: var(--term-dim); }
+.livebadge { flex: none; display: inline-flex; align-items: center; gap: 5px; font-size: 9.5px; color: var(--a-green); white-space: nowrap; }
+.livebadge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--a-green); }
+.live-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.lb { text-align: center; padding: 7px 0; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.lb.open { background: #4b7cf0; color: #fff; }
+.lb.disc { border: 1px solid #6b2e2b; color: var(--a-bred); }
+.sep-lbl { padding: 16px 14px 2px; font-family: var(--f-body); font-size: 9.5px; color: var(--term-dim); text-transform: uppercase; letter-spacing: .08em; }
+
+.reply { margin-top: 6px; display: flex; align-items: center; gap: 6px; padding: 7px 8px 7px 10px; border-radius: 999px; background: #2a2d34; font-family: var(--f-mono); font-size: 9.6px; }
+.reply .pre { color: var(--term-dim); flex: none; }
+.reply .rtxt { color: var(--term-fg); }
+.reply .rsend { margin-left: auto; width: 20px; height: 20px; border-radius: 50%; background: #4b7cf0; color: #fff; display: grid; place-items: center; font-size: 9px; flex: none; }
+ol.steps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; }
+ol.steps li::marker { font-family: var(--f-mono); color: var(--accent); }
+
+/* settings screen */
+.title-row { display: flex; align-items: center; justify-content: space-between; padding-right: 14px; }
+.title-row svg { width: 18px; height: 18px; fill: none; stroke: var(--term-dim); stroke-width: 1.8; }
+.set { flex: 1; min-height: 0; overflow: hidden; font-family: var(--f-body); }
+.set-g { padding: 12px 14px 4px; font-size: 9.5px; color: var(--a-bblue); text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
+.set-r { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 14px; font-size: 11.5px; }
+.set-r .v { font-size: 10.5px; color: var(--term-dim); }
+.slider { padding: 2px 14px 6px; display: flex; align-items: center; gap: 8px; font-size: 9px; color: var(--term-dim); }
+.slider .track { flex: 1; height: 4px; border-radius: 2px; background: #3b3e45; position: relative; }
+.slider .track::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 42%; border-radius: 2px; background: var(--a-bblue); }
+.slider .track::after { content: ""; position: absolute; left: 42%; top: 50%; width: 14px; height: 14px; border-radius: 50%; background: var(--a-bblue); transform: translate(-50%, -50%); }
+.preview { margin: 2px 14px 6px; padding: 8px 10px; border: 1px solid var(--term-line); border-radius: 8px; font-family: var(--f-mono); font-size: 10.5px; line-height: 1.4; }
+
+/* copy/move rule sheet */
+.seg { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--term-line); border-radius: 999px; overflow: hidden; font-size: 11px; text-align: center; }
+.seg span { padding: 6px 0; color: var(--term-dim); }
+.seg span.on { background: #24324f; color: var(--a-bblue); font-weight: 600; }
+.dest { display: flex; flex-direction: column; }
+.dest-r { display: flex; align-items: center; gap: 10px; padding: 8px 2px; font-size: 11.5px; border-bottom: 1px solid var(--term-line); }
+.dest-r:last-child { border-bottom: 0; }
+.dest-r .cur { margin-left: auto; font-size: 9.5px; color: var(--term-dim); }
+.cb { flex: none; width: 15px; height: 15px; border-radius: 4px; border: 1.5px solid var(--term-dim); display: grid; place-items: center; font-size: 10px; line-height: 1; }
+.cb.on { background: #4b7cf0; border-color: #4b7cf0; color: #fff; }
+.dest-r.dis { color: var(--term-dim); }
+.menu-mini { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* text selection */
+.sel { background: rgba(75,124,240,.45); }
+.hs, .he { position: relative; display: inline-block; width: 0; height: 1em; vertical-align: top; }
+.hs::after, .he::after { content: ""; position: absolute; top: 1.15em; width: 12px; height: 12px; background: #4b7cf0; }
+.hs::after { left: -12px; border-radius: 50% 0 50% 50%; }
+.he::after { left: 0; border-radius: 0 50% 50% 50%; }
+.handle { position: absolute; width: 12px; height: 12px; background: #4b7cf0; }
+.handle.l { border-radius: 50% 0 50% 50%; }
+.handle.r { border-radius: 0 50% 50% 50%; }
+.seltb { position: absolute; display: flex; background: #2a2d34; border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.6); font-family: var(--f-body); font-size: 11px; overflow: hidden; }
+.seltb span { padding: 8px 11px; color: var(--term-fg); }
+.seltb span + span { border-left: 1px solid #3a3d45; }
+.newchip { position: absolute; left: 50%; bottom: 62px; transform: translateX(-50%); padding: 5px 11px; border-radius: 999px; background: #1d2433; color: var(--a-bblue); font-family: var(--f-body); font-size: 10px; border: 1px solid #2f3d5c; white-space: nowrap; }
+
+/* annotations */
+.callout { font-family: var(--f-mono); font-size: 0.72rem; color: var(--accent); letter-spacing: .02em; text-align: center; max-width: 272px; }
+
+/* architecture */
+.arch { display: grid; grid-template-columns: minmax(0, 1fr) 230px; gap: 16px; }
+@media (max-width: 760px) { .arch { grid-template-columns: minmax(0,1fr); } }
+.layers { display: flex; flex-direction: column; gap: 10px; }
+.layer { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.layer .lh { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.layer .lh span { font-size: 0.85rem; color: var(--muted); }
+.boxes { display: flex; flex-wrap: wrap; gap: 8px; }
+.box { font-family: var(--f-mono); font-size: 0.8rem; padding: 6px 10px; border-radius: 6px; background: var(--accent-soft); color: var(--ink); }
+.box.pure { background: transparent; border: 1px dashed var(--rule); }
+.side { background: var(--surface); border: 2px solid var(--accent); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 10px; font-size: 0.95rem; }
+.side ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; font-family: var(--f-mono); font-size: 0.8rem; }
+.flow span.step { padding: 6px 10px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); }
+.flow span.arr { color: var(--muted); padding: 0 2px; }
+
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 28px; }
+.two > * { min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+ul.plain { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
+pre.tree { margin: 0; overflow-x: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 18px; font-family: var(--f-mono); font-size: 0.8rem; line-height: 1.6; }
+pre.tree .cm { color: var(--muted); }
+
+.swatches { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; background: var(--term-bg); padding: 14px; border-radius: 10px; }
+@media (max-width: 520px) { .swatches { grid-template-columns: repeat(4, minmax(0,1fr)); } }
+.sw8 { display: flex; flex-direction: column; gap: 4px; font-family: var(--f-mono); font-size: 0.68rem; color: var(--term-dim); }
+.sw8 i { display: block; height: 22px; border-radius: 4px; }
+
+.opts { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.opts td, .opts th { padding: 8px 10px; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; }
+.opts th { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 400; }
+.opts td:first-child { font-family: var(--f-mono); font-size: 0.82rem; white-space: nowrap; }
+.opts td.num { font-variant-numeric: tabular-nums; font-family: var(--f-mono); font-size: 0.82rem; color: var(--muted); }
+
+ol.miles { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; counter-reset: m; }
+ol.miles li { counter-increment: m; display: grid; grid-template-columns: 44px minmax(0,1fr); gap: 4px 14px; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 18px; }
+ol.miles li::before { content: counter(m); grid-row: span 3; font-family: var(--f-display); font-size: 1.8rem; font-weight: 800; color: var(--accent); line-height: 1; }
+ol.miles .done { font-size: 0.9rem; color: var(--muted); }
+ol.miles .done b { color: var(--ink); font-weight: 600; }
+
+ol.qs { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 14px; }
+ol.qs li::marker { font-family: var(--f-mono); color: var(--accent); }
+ol.qs .def { display: block; color: var(--muted); font-size: 0.93rem; }
+.out-scope { color: var(--muted); }
+</style>
+
+<div class="wrap">
+
+<header class="stack col">
+  <span class="eyebrow">Android MUD client · design plan for review</span>
+  <h1>Tether</h1>
+  <p class="lede">A MUD client for Android that keeps the connection alive with the screen off, lets you add triggers and aliases mid-fight, leaves Gboard alone, and shows full ANSI color as light text on a black background.</p>
+  <span class="status-pill">Draft 3. Needs sign-off before we build</span>
+  <p style="font-size:.95rem;color:var(--muted)">“Tether” is a working name. Mockups use example MUD output, not a real session.</p>
+  <div class="changes">
+    <h3>Changes</h3>
+    <ul>
+      <li><b>Disconnect from the Worlds list.</b> The connected world has its own Disconnect button.</li>
+      <li><b>Global and per-world rules.</b> Each trigger or alias applies to all worlds or to one world. Use a separate world for each character to give it its own rules.</li>
+      <li><b>One-line input.</b> The text box is always exactly one line tall. Longer commands scroll sideways.</li>
+      <li><b>Adjustable text size.</b> Pinch the output to resize it. The same setting is also a slider in Settings.</li>
+      <li><b>More room for output.</b> Thinner top bar, plus an option to hide Android's status bar.</li>
+      <li><b>Rules screen.</b> This-world and all-worlds rules are in separate boxes.</li>
+      <li><b>Select and copy output.</b> Long-press the output for normal text selection across lines, with Copy and Select all.</li>
+      <li><b>Removed: making a trigger from an output line.</b> Long-press in the output is only for selecting text. New triggers come from + on the Rules screen or <code>#action</code>.</li>
+      <li><b>Copy rules between worlds.</b> Long-press a rule to copy or move it to any worlds, or to all worlds.</li>
+      <li><b>Lock-screen reply.</b> New section below explains how it works.</li>
+    </ul>
+  </div>
+</header>
+
+<section class="col">
+  <span class="eyebrow">Requirements</span>
+  <h2>What you asked for and how we meet it</h2>
+  <div class="table-scroll">
+  <table class="req">
+    <thead><tr><th>You said</th><th>What we build</th></tr></thead>
+    <tbody>
+      <tr><td>“Not close or stop working if I turn off my phone screen.”</td>
+        <td><strong>The connection lives in a foreground service, not the screen.</strong>A persistent notification keeps Android from killing it. A Wi-Fi lock keeps the radio awake, a small keepalive stops routers from dropping idle sockets, and if the network changes the app reconnects on its own. It asks once to be excluded from battery optimization, which matters on Samsung and Pixel.</td></tr>
+      <tr><td>“Triggers and aliases easy to add on the fly.”</td>
+        <td><strong>Two ways in, and both apply instantly.</strong>Type <code>#alias</code> or <code>#action</code> in the command line, or use the Rules screen to add, edit, group, copy, and switch rules on and off. No reconnecting.</td></tr>
+      <tr><td>“Some rules are global to all my accounts, some are specific to one character.”</td>
+        <td><strong>Every rule applies to all worlds or to one world.</strong>Each character gets its own world entry (for example “Viking – Thorin”, “Viking – Alt”), so per-world rules are per-character rules. In a session the app runs global rules plus that world's rules. If a world alias has the same name as a global one, the world alias wins.</td></tr>
+      <tr><td>“Just use Gboard, don't shrink it, move it, or add MUD buttons.”</td>
+        <td><strong>One plain text field and the system keyboard. Nothing else.</strong>No button bars, no custom keyboard, no floating d-pad. The output area shrinks to sit above the keyboard, and the keyboard stays the size and position Gboard chooses. It stays open after you press send. Autocorrect is off by default (you can turn it on in settings). The text box is always one line tall. A long command scrolls sideways and never grows the box.</td></tr>
+      <tr><td>“Maximum screen space for seeing what's happening.” “Adjustable font size.”</td>
+        <td><strong>Output gets everything that isn't the keyboard or the input line.</strong>The top bar is one thin row, and Android's status bar can be hidden. Pinch the output to change the text size. It shows the size and how many columns fit while you pinch, and the same value is a slider in Settings. When the size changes, the MUD is told the new width so it wraps text correctly.</td></tr>
+      <tr><td>“I need colors to work.”</td>
+        <td><strong>Full ANSI: 16 colors, xterm 256, and 24-bit truecolor.</strong>Bold, underline and reverse work too. The client tells the server what it supports during telnet negotiation, so MUDs that check before sending color will send it.</td></tr>
+      <tr><td>“Black background, white text.”</td>
+        <td><strong>Pure black (#000) with light text in a monospace font.</strong>This is the only theme in v1. Pure black also saves battery on OLED screens.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <div class="stack col">
+    <span class="eyebrow">Screens</span>
+    <h2>How it looks</h2>
+    <p>Ten screens cover the whole v1 app. The session screen is where you spend almost all your time, so everything else stays out of its way.</p>
+  </div>
+
+  <div class="gallery">
+
+    <!-- 1 session -->
+    <figure>
+      <div class="phone">
+        <div class="sbar"><span>11:47</span><span class="dots">▾ ▴ ▮</span></div>
+        <div class="appbar">
+          <span class="dot"></span><span class="wname">VikingMUD</span><span class="meta">4h 12m</span>
+          <span class="icons">
+            <svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="19" r="1.2"/></svg>
+          </span>
+        </div>
+        <div class="out">
+<div><span class="Y bold">The Village Square</span></div>
+<div class="w">You are standing in the centre of the village. A fountain bubbles quietly here and narrow roads lead off in every direction.</div>
+<div class="g">    Obvious exits: north, south, east, west</div>
+<div class="c">A town guard (wandering).</div>
+<div class="c">A small brown rat.</div>
+<div><span class="G">HP:142/160</span> <span class="B">SP:88/90</span> <span class="dim">&gt;</span> <span class="dim">kill rat</span></div>
+<div class="W">You hit the small brown rat hard.</div>
+<div class="hl"><span class="R">The small brown rat bites you.</span></div>
+<div class="W">You massacre the small brown rat to small fragments.</div>
+<div class="y">The small brown rat died.</div>
+<div><span class="M">Hagbard tells you: </span><span class="W">wanna group for the troll?</span></div>
+<div><span class="G">HP:131/160</span> <span class="B">SP:88/90</span> <span class="dim">&gt;</span></div>
+        </div>
+        <div class="in"><span class="ph">Send a command</span></div>
+        <div class="gest"></div>
+      </div>
+      <figcaption><b>Session</b>Black background, ANSI colors as the MUD sends them. The red-tinted line is a trigger highlight. Top bar: world, connection dot, uptime, rules shortcut, menu. That's all.</figcaption>
+    </figure>
+
+    <!-- 2 session with keyboard -->
+    <figure>
+      <div class="phone">
+        <div class="sbar"><span>11:48</span><span class="dots">▾ ▴ ▮</span></div>
+        <div class="appbar">
+          <span class="dot"></span><span class="wname">VikingMUD</span><span class="meta">4h 13m</span>
+          <span class="icons">
+            <svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="19" r="1.2"/></svg>
+          </span>
+        </div>
+        <div class="out">
+<div class="y">The small brown rat died.</div>
+<div><span class="M">Hagbard tells you: </span><span class="W">wanna group for the troll?</span></div>
+<div><span class="G">HP:131/160</span> <span class="B">SP:88/90</span> <span class="dim">&gt;</span> <span class="dim">#alias k {kill %1}</span></div>
+<div class="echo">#alias k = kill %1</div>
+<div><span class="G">HP:131/160</span> <span class="B">SP:88/90</span> <span class="dim">&gt;</span> <span class="dim">k guard</span></div>
+<div class="W">You hit the town guard.</div>
+        </div>
+        <div class="in one"><span>tell hagbard sure, meet me at the north gate after I sell this loot</span><span class="caret"></span></div>
+        <div class="kb" id="kb">
+          <div class="sugg"><span>sure</span><span>loot</span><span>later</span></div>
+        </div>
+        <div class="gest" style="background:var(--kb-bg)"></div>
+      </div>
+      <figcaption><b>Typing</b>Gboard at its normal size and position. The output shrinks to fit above it and stays pinned to the newest line. The input stays one line tall: this long tell has scrolled left, and its start is faded off the edge. <code>#alias</code> adds an alias for this world, <code>#galias</code> for all worlds.</figcaption>
+    </figure>
+
+    <!-- 2b select text -->
+    <figure>
+      <div class="phone">
+        <div class="sbar"><span>11:49</span><span class="dots">▾ ▴ ▮</span></div>
+        <div class="appbar">
+          <span class="dot"></span><span class="wname">VikingMUD – Thorin</span><span class="meta">4h 14m</span>
+        </div>
+        <div class="out">
+<div class="W">You massacre the small brown rat to small fragments.</div>
+<div class="y">The small brown rat died.</div>
+<div><span class="M">Hagbard tells you: </span><span class="W">wanna group for the troll?</span></div>
+<div><span class="G">HP:131/160</span> <span class="B">SP:88/90</span> <span class="dim">&gt;</span> <span class="dim">north</span></div>
+<div><span class="Y bold">The Old Signpost</span></div>
+<div class="w">A weathered wooden sign leans beside the road.</div>
+<div class="g">    Obvious exits: north, south</div>
+<div><span class="G">HP:131/160</span> <span class="B">SP:88/90</span> <span class="dim">&gt;</span> <span class="dim">look at sign</span></div>
+<div class="W" style="position:relative"><div class="seltb" style="left:30px;top:-34px"><span>Copy</span><span>Select all</span></div>The sign reads: <span class="hs"></span><span class="sel">The troll lair is past the old mill.</span></div>
+<div class="W"><span class="sel">Ask Torvald at the gate for the key.</span><span class="he"></span></div>
+<div><span class="G">HP:131/160</span> <span class="B">SP:88/90</span> <span class="dim">&gt;</span></div>
+<div class="W">Hagbard arrives from the south.</div>
+<div class="W">Hagbard says: ready when you are.</div>
+<div class="dim">&nbsp;</div>
+<div class="dim">&nbsp;</div>
+        </div>
+        <div class="newchip">Paused · 3 new lines ↓</div>
+        <div class="in"><span class="ph">Send a command</span></div>
+        <div class="gest"></div>
+      </div>
+      <figcaption><b>Select and copy</b>Long-press the output to start a normal Android text selection. Drag the handles across as many lines as you want. The toolbar has Copy and Select all. Long-press does nothing else in the output, so it never fights with selection. While text is selected, the output stops scrolling so the selection doesn't move. New lines are counted and shown when you're done. Copied text is plain, without color codes.</figcaption>
+    </figure>
+
+    <!-- 4 rules list -->
+    <figure>
+      <div class="phone">
+        <div class="sbar"><span>11:50</span><span class="dots">▾ ▴ ▮</span></div>
+        <div class="appbar"><span style="font-size:15px">←</span><span class="wname">Rules · Thorin</span><span class="icons" style="font-family:var(--f-body);font-size:11px">▾</span></div>
+        <div class="tabs"><span class="on">Triggers  9</span><span>Aliases  14</span></div>
+        <div class="list scoped">
+          <div class="scope">
+            <div class="scope-hd">
+              <div><span class="scope-t">VikingMUD – Thorin</span><span class="scope-s">3</span></div>
+              <span class="scope-add">+</span>
+            </div>
+            <div class="item"><div class="txt"><span class="pat">The %1 slashes you.</span><span class="act"><span class="tagg">Combat</span>Highlight red · vibrate</span></div><span class="sw on"></span></div>
+            <div class="item"><div class="txt"><span class="pat">^HP:(\d+)/160</span><span class="act"><span class="tagg">Combat</span>flee if HP &lt; 40</span></div><span class="sw on"></span></div>
+            <div class="item off"><div class="txt"><span class="pat">The fountain gurgles.</span><span class="act"><span class="tagg">Spam</span>Gag</span></div><span class="sw"></span></div>
+          </div>
+          <div class="scope global">
+            <div class="scope-hd">
+              <div><span class="scope-t"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></svg>All worlds</span><span class="scope-s">6</span></div>
+              <span class="scope-add">+</span>
+            </div>
+            <div class="item"><div class="txt"><span class="pat">%1 tells you: %2</span><span class="act"><span class="tagg">Social</span>Magenta · notify</span></div><span class="sw on"></span></div>
+            <div class="item"><div class="txt"><span class="pat">You are hungry.</span><span class="act">eat bread</span></div><span class="sw on"></span></div>
+          </div>
+        </div>
+        <div class="gest"></div>
+      </div>
+      <figcaption><b>Triggers &amp; aliases</b>Two separate boxes: this world's rules on top, all-worlds rules below with a globe. Each box has its own +, so a new rule starts in the right place. Long-press a rule to edit, copy, move, or delete it. The ▾ switches to another world. The switch turns a rule off without deleting it. Group names like Combat are optional tags.</figcaption>
+    </figure>
+
+    <!-- 4a new trigger -->
+    <figure>
+      <div class="phone">
+        <div class="sbar"><span>11:49</span><span class="dots">▾ ▴ ▮</span></div>
+        <div class="appbar"><span style="font-size:15px">←</span><span class="wname">Rules · Thorin</span></div>
+        <div class="tabs"><span class="on">Triggers  9</span><span>Aliases  14</span></div>
+        <div class="list scoped">
+          <div class="scope">
+            <div class="scope-hd"><div><span class="scope-t">VikingMUD – Thorin</span><span class="scope-s">3</span></div><span class="scope-add">+</span></div>
+          </div>
+        </div>
+        <div class="scrim"></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <h4>New trigger</h4>
+          <span class="lbl">Pattern</span>
+          <div class="field">The <span class="wild">%1</span> slashes you.<span class="caret"></span></div>
+          <span class="lbl">Actions</span>
+          <div class="chips">
+            <span class="chip on">Highlight red</span>
+            <span class="chip">Send command</span>
+            <span class="chip">Gag</span>
+            <span class="chip on">Vibrate</span>
+            <span class="chip">Notify</span>
+          </div>
+          <span class="lbl">Applies to</span>
+          <div class="chips">
+            <span class="chip on">VikingMUD – Thorin</span>
+            <span class="chip">All worlds</span>
+          </div>
+          <div class="btnrow"><span class="btn text">Advanced</span><span class="btn fill">Save</span></div>
+        </div>
+      </div>
+      <figcaption><b>New trigger</b>Tap + in either box on the Rules screen. Applies to starts on that box's scope and can be changed. Type the pattern with <code>%1</code> wildcards, pick actions, Save, and it's live. Advanced opens the full editor (command to send, regex, group, priority).</figcaption>
+    </figure>
+
+    <!-- 4b copy rule -->
+    <figure>
+      <div class="phone">
+        <div class="sbar"><span>11:50</span><span class="dots">▾ ▴ ▮</span></div>
+        <div class="appbar"><span style="font-size:15px">←</span><span class="wname">Rules · Thorin</span></div>
+        <div class="tabs"><span class="on">Triggers  9</span><span>Aliases  14</span></div>
+        <div class="list scoped">
+          <div class="scope">
+            <div class="scope-hd"><div><span class="scope-t">VikingMUD – Thorin</span><span class="scope-s">3</span></div><span class="scope-add">+</span></div>
+            <div class="item"><div class="txt"><span class="pat">The %1 slashes you.</span><span class="act"><span class="tagg">Combat</span>Highlight red · vibrate</span></div><span class="sw on"></span></div>
+          </div>
+        </div>
+        <div class="scrim"></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <div class="field">The <span class="wild">%1</span> slashes you.</div>
+          <div class="menu-mini"><span class="chip">Edit</span><span class="chip on">Copy / move</span><span class="chip">Delete</span></div>
+          <div class="seg"><span class="on">Copy</span><span>Move</span></div>
+          <span class="lbl">To</span>
+          <div class="dest">
+            <div class="dest-r"><span class="cb"></span>All worlds</div>
+            <div class="dest-r dis"><span class="cb"></span>VikingMUD – Thorin<span class="cur">current</span></div>
+            <div class="dest-r"><span class="cb on">✓</span>VikingMUD – Alt</div>
+            <div class="dest-r"><span class="cb on">✓</span>VikingMUD – Bard</div>
+            <div class="dest-r"><span class="cb"></span>Test MUD</div>
+          </div>
+          <div class="btnrow"><span class="btn text">Cancel</span><span class="btn fill">Copy to 2</span></div>
+        </div>
+      </div>
+      <figcaption><b>Copy or move a rule</b>Long-press any rule, in either box, and pick Copy / move. Tick any mix of worlds and All worlds. Copies are independent, so editing one doesn't change the others. If an alias with the same name already exists there, it asks before replacing it. Works the same on the Aliases tab.</figcaption>
+    </figure>
+
+    <!-- 5 worlds -->
+    <figure>
+      <div class="phone">
+        <div class="sbar"><span>11:51</span><span class="dots">▾ ▴ ▮</span></div>
+        <div class="title-row"><div class="title-big">Worlds</div><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></div>
+        <div class="globalrow"><div style="display:flex;flex-direction:column;gap:2px"><span>Global rules</span><span class="sub">6 triggers · 9 aliases</span></div><span style="color:var(--term-dim)">›</span></div>
+        <div class="list">
+          <div class="live">
+            <div class="live-top">
+              <div class="txt2"><span class="n2">VikingMUD – Thorin</span><span class="h">host.example : 2001</span></div>
+              <span class="livebadge">4h 15m</span>
+            </div>
+            <div class="live-btns"><span class="lb open">Open</span><span class="lb disc">Disconnect</span></div>
+          </div>
+          <div class="sep-lbl">Other worlds</div>
+          <div class="world"><span class="n">VikingMUD – Alt</span><span class="h">host.example : 2001</span><span class="h" style="font-family:var(--f-body)">Yesterday</span></div>
+          <div class="world"><span class="n">Test MUD</span><span class="h">localhost : 7680</span><span class="h" style="font-family:var(--f-body)">3 weeks ago</span></div>
+        </div>
+        <div class="fab">+</div>
+        <div class="gest"></div>
+      </div>
+      <figcaption><b>Worlds</b>Starting screen. The connected world gets its own box at the top with two buttons, Open and Disconnect. Disconnect turns into “Tap again” for 3 seconds, so a mis-tap doesn't drop you mid-fight. Global rules sit at the top. Each character is its own world with its own login and rules, even when the host is the same. Hosts here are placeholders.</figcaption>
+    </figure>
+
+    <!-- 8 settings -->
+    <figure>
+      <div class="phone">
+        <div class="sbar"><span>11:53</span><span class="dots">▾ ▴ ▮</span></div>
+        <div class="appbar"><span style="font-size:15px">←</span><span class="wname">Settings</span></div>
+        <div class="set">
+          <div class="set-g">Display</div>
+          <div class="set-r"><span>Text size</span><span class="v">13</span></div>
+          <div class="slider"><span>8</span><span class="track"></span><span>20</span></div>
+          <div class="preview"><span class="Y bold">The North Gate</span><br><span class="g">Obvious exits: north, south</span></div>
+          <div class="set-r"><span>Hide status bar</span><span class="sw"></span></div>
+          <div class="set-g">Keyboard</div>
+          <div class="set-r"><span>Autocorrect</span><span class="sw"></span></div>
+          <div class="set-r"><span>Keep open after send</span><span class="sw on"></span></div>
+          <div class="set-g">Connection</div>
+          <div class="set-r"><span>Reconnect automatically</span><span class="sw on"></span></div>
+          <div class="set-r"><span>Keep Wi-Fi awake</span><span class="sw on"></span></div>
+          <div class="set-r"><span>Keep CPU awake</span><span class="sw"></span></div>
+          <div class="set-r"><span>Battery optimization</span><span class="v">Unrestricted</span></div>
+          <div class="set-g">Data</div>
+          <div class="set-r"><span>Scrollback</span><span class="v">5,000 lines</span></div>
+          <div class="set-r"><span>Export / import rules</span><span class="v">›</span></div>
+        </div>
+        <div class="gest"></div>
+      </div>
+      <figcaption><b>Settings</b>Opened from the gear on the Worlds screen or the ⋮ menu in a session. These are app-wide settings. Host, port, and auto-login are per world, edited by long-pressing a world. Changing text size here and pinching in a session change the same setting.</figcaption>
+    </figure>
+
+    <!-- 7 text size -->
+    <figure>
+      <div class="phone">
+        <div class="sbar"><span>11:52</span><span class="dots">▾ ▴ ▮</span></div>
+        <div class="appbar">
+          <span class="dot"></span><span class="wname">VikingMUD – Thorin</span><span class="meta">4h 16m</span>
+        </div>
+        <div class="out" style="font-size:12.5px">
+<div><span class="Y bold">The North Gate</span></div>
+<div class="w">Heavy oak doors stand open to the road beyond.</div>
+<div class="g">    Obvious exits: north, south</div>
+<div class="c">Hagbard the dwarf.</div>
+<div><span class="M">Hagbard says: </span><span class="W">ready?</span></div>
+<div><span class="G">HP:160/160</span> <span class="B">SP:90/90</span> <span class="dim">&gt;</span></div>
+        </div>
+        <div class="finger" style="left:58px;top:170px"></div>
+        <div class="finger" style="left:172px;top:300px"></div>
+        <div class="pinch"><span class="big">13</span><span class="small">38 cols</span></div>
+        <div class="in"><span class="ph">Send a command</span></div>
+        <div class="gest"></div>
+      </div>
+      <figcaption><b>Text size</b>Pinch anywhere on the output. The text resizes live, and a small label shows the size and how many columns fit. Let go and it's saved. Settings has the same value as a slider.</figcaption>
+    </figure>
+
+    <!-- 6 lock screen -->
+    <figure>
+      <div class="phone">
+        <div class="sbar"><span></span><span class="dots">▾ ▴ ▮</span></div>
+        <div class="lock">
+          <div class="clock">11:58</div>
+          <div class="date">Thursday, October 22</div>
+          <div class="notif">
+            <div class="hd"><i></i>Tether · VikingMUD – Thorin · now</div>
+            <div class="t">Hagbard tells you</div>
+            <div class="body">wanna group for the troll?</div>
+            <div class="reply">
+              <span class="pre">tell hagbard</span><span class="rtxt">sure, omw</span><span class="caret"></span>
+              <span class="rsend">➤</span>
+            </div>
+          </div>
+          <div class="notif">
+            <div class="hd"><i></i>Tether · ongoing</div>
+            <div class="t">Connected to VikingMUD</div>
+            <div class="body">4h 22m</div>
+            <div class="acts"><span>Open</span><span>Disconnect</span></div>
+          </div>
+        </div>
+        <div class="gest"></div>
+      </div>
+      <figcaption><b>Screen off</b>The ongoing notification is what keeps the connection alive. A “notify” trigger posts a normal notification. Here, Reply has been tapped and Gboard is open in the notification itself. See <a href="#reply">how reply works</a> below.</figcaption>
+    </figure>
+
+  </div>
+</section>
+
+<section class="col">
+  <span class="eyebrow">The hard part</span>
+  <h2>Staying connected with the screen off</h2>
+  <p>Most MUD clients drop out because the socket belongs to the Activity, the thing on screen. When Android stops or kills that Activity, the connection goes with it. In Tether the screen only displays the connection. Something else owns it.</p>
+  <div class="two">
+    <div class="card">
+      <h3>What keeps it alive</h3>
+      <ul class="plain">
+        <li>The socket and scrollback live in an app-wide <code>SessionRepository</code>. Rotating the phone, switching apps, or locking the screen never touches them.</li>
+        <li><code>SessionService</code> is a foreground service started on connect and stopped on disconnect. It shows the ongoing notification and keeps the process alive.</li>
+        <li>The service type is <code>specialUse</code> (“persistent telnet connection”). <code>dataSync</code> is time-limited on Android 15, so it would cut out after a few hours.</li>
+        <li>A <code>WifiLock</code> is held while connected. A partial wake lock is optional, off by default, and only for phones that still drop the connection without it.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>What recovers it</h3>
+      <ul class="plain">
+        <li>TCP keepalive, plus a telnet <code>IAC NOP</code> every 60 s, stops routers and carriers from timing out an idle socket.</li>
+        <li>A network callback notices Wi-Fi to cell handoffs and reconnects with backoff. Auto-login runs again, and the session screen shows a dim “reconnected” line.</li>
+        <li>A first-run prompt asks to ignore battery optimization, with a link to the phone maker's settings for brands that kill aggressively.</li>
+        <li>Acceptance test: connect, lock the phone for 8 hours on Wi-Fi, unlock, still connected, nothing missing from scrollback.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="col" id="reply">
+  <span class="eyebrow">Notifications</span>
+  <h2>How reply from the lock screen works</h2>
+  <p>It uses Android's standard inline reply, the same one messaging apps use. Nothing about it is MUD-specific except the command it sends.</p>
+  <ol class="steps">
+    <li><b>A trigger has “Notify” turned on.</b> The global <code>%1 tells you: %2</code> trigger fires on a tell and posts a notification: title “Hagbard tells you”, body “wanna group for the troll?”.</li>
+    <li><b>The trigger has a reply template.</b> This one is <code>tell %1</code>, so <code>%1</code> becomes “hagbard”. A trigger with no template has no Reply button, only Open.</li>
+    <li><b>You tap Reply and type.</b> Gboard opens inside the notification. The template is shown in front of what you type, so you know what will be sent.</li>
+    <li><b>Send.</b> The service sends <code>tell hagbard sure, omw</code> over the open connection, the same as if you had typed it in the app. The app doesn't open. The session shows <span class="mono" style="color:var(--accent)">[reply] tell hagbard sure, omw</span> so you can see it later.</li>
+  </ol>
+  <p style="color:var(--muted);font-size:.95rem">If the phone has a PIN or fingerprint lock, Android asks you to unlock before the reply is sent. That's the default because a reply is a real command to your character. You can turn it off per trigger. If the connection dropped in the meantime, the reply waits and is sent after the app reconnects. Several tells from the same person stack into one conversation notification, not a pile of separate ones.</p>
+</section>
+
+<section class="col">
+  <span class="eyebrow">Color &amp; protocol</span>
+  <h2>ANSI palette, tuned for black</h2>
+  <p>The MUD picks the colors. Tether only decides what each one looks like on black. Normal colors (SGR 30–37) are slightly softened so long sessions are easy on the eyes. Bright colors (90–97, or bold) stay vivid. 256-color and truecolor codes render exactly as sent.</p>
+  <div class="swatches" aria-label="ANSI 16 color palette">
+    <div class="sw8"><i style="background:var(--a-black)"></i>30</div>
+    <div class="sw8"><i style="background:var(--a-red)"></i>31</div>
+    <div class="sw8"><i style="background:var(--a-green)"></i>32</div>
+    <div class="sw8"><i style="background:var(--a-yellow)"></i>33</div>
+    <div class="sw8"><i style="background:var(--a-blue)"></i>34</div>
+    <div class="sw8"><i style="background:var(--a-magenta)"></i>35</div>
+    <div class="sw8"><i style="background:var(--a-cyan)"></i>36</div>
+    <div class="sw8"><i style="background:var(--a-white)"></i>37</div>
+    <div class="sw8"><i style="background:var(--a-bblack)"></i>90</div>
+    <div class="sw8"><i style="background:var(--a-bred)"></i>91</div>
+    <div class="sw8"><i style="background:var(--a-bgreen)"></i>92</div>
+    <div class="sw8"><i style="background:var(--a-byellow)"></i>93</div>
+    <div class="sw8"><i style="background:var(--a-bblue)"></i>94</div>
+    <div class="sw8"><i style="background:var(--a-bmagenta)"></i>95</div>
+    <div class="sw8"><i style="background:var(--a-bcyan)"></i>96</div>
+    <div class="sw8"><i style="background:var(--a-bwhite)"></i>97</div>
+  </div>
+  <div class="table-scroll">
+  <table class="opts">
+    <thead><tr><th>Telnet option</th><th>Code</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>TTYPE + MTTS</td><td class="num">24</td><td>Tells the MUD we support ANSI, 256-color, truecolor and UTF-8.</td></tr>
+      <tr><td>NAWS</td><td class="num">31</td><td>Sends the screen width in columns so the MUD wraps text to fit. Resent when the keyboard opens or the phone rotates.</td></tr>
+      <tr><td>EOR / GA</td><td class="num">25</td><td>Marks where prompts end, so a prompt shows up right away instead of waiting for a newline.</td></tr>
+      <tr><td>CHARSET</td><td class="num">42</td><td>Agrees on UTF-8 where the server supports it. Otherwise falls back to Latin-1.</td></tr>
+      <tr><td>MCCP2</td><td class="num">86</td><td>Compresses the stream. Saves mobile data. Milestone 3.</td></tr>
+      <tr><td>GMCP</td><td class="num">201</td><td class="out-scope">Not in v1. The parser leaves room for it.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <div class="stack col">
+    <span class="eyebrow">Architecture</span>
+    <h2>Following Android's recommended app architecture</h2>
+    <p>This follows Google's <a href="https://developer.android.com/topic/architecture" rel="noopener">guide to app architecture</a>: data flows one way, the UI is driven by state, and each layer only talks to the one below it. The telnet and ANSI code is plain Kotlin with no Android dependencies, so it is unit tested on its own.</p>
+  </div>
+  <div class="arch">
+    <div class="layers">
+      <div class="layer">
+        <div class="lh"><h3>UI layer</h3><span>Jetpack Compose · Material 3 · one Activity</span></div>
+        <div class="boxes"><span class="box">SessionScreen</span><span class="box">WorldsScreen</span><span class="box">RulesScreen</span><span class="box">RuleEditorSheet</span><span class="box">SettingsScreen</span><span class="box">*ViewModel → StateFlow&lt;UiState&gt;</span></div>
+      </div>
+      <div class="layer">
+        <div class="lh"><h3>Domain layer</h3><span>Pure Kotlin · no Android imports</span></div>
+        <div class="boxes"><span class="box">TriggerEngine</span><span class="box">AliasExpander</span><span class="box">CommandParser (#alias, #galias, #action, ;)</span><span class="box">RuleResolver (global + world)</span></div>
+      </div>
+      <div class="layer">
+        <div class="lh"><h3>Data layer</h3><span>Repositories are the single source of truth</span></div>
+        <div class="boxes"><span class="box">SessionRepository</span><span class="box">WorldRepository</span><span class="box">RuleRepository</span><span class="box">SettingsRepository</span></div>
+        <div class="boxes"><span class="box pure">TelnetClient</span><span class="box pure">AnsiParser</span><span class="box pure">Room DB</span><span class="box pure">DataStore</span></div>
+      </div>
+    </div>
+    <aside class="side">
+      <h3>SessionService</h3>
+      <p style="font-size:.9rem;color:var(--muted)">Foreground service. It keeps the process alive and does very little else.</p>
+      <ul>
+        <li>Observes <code>SessionRepository</code> to update the notification</li>
+        <li>Holds the Wi-Fi lock</li>
+        <li>Handles notification actions: reply, disconnect</li>
+        <li>No socket code of its own</li>
+      </ul>
+    </aside>
+  </div>
+
+  <div class="stack col">
+    <h3>A line from the server, start to finish</h3>
+    <div class="flow">
+      <span class="step">socket bytes</span><span class="arr">→</span>
+      <span class="step">MCCP inflate</span><span class="arr">→</span>
+      <span class="step">telnet: strip IAC, negotiate</span><span class="arr">→</span>
+      <span class="step">ANSI → styled spans</span><span class="arr">→</span>
+      <span class="step">TriggerEngine</span><span class="arr">→</span>
+      <span class="step">scrollback ring buffer</span><span class="arr">→</span>
+      <span class="step">LazyColumn</span>
+    </div>
+    <h3 style="margin-top:8px">A command from you</h3>
+    <div class="flow">
+      <span class="step">text field</span><span class="arr">→</span>
+      <span class="step"># command? handle locally</span><span class="arr">→</span>
+      <span class="step">split on ;</span><span class="arr">→</span>
+      <span class="step">AliasExpander</span><span class="arr">→</span>
+      <span class="step">socket</span>
+    </div>
+    <p style="color:var(--muted);font-size:.95rem">Each stored rule has an optional world ID: empty means global. <code>RuleResolver</code> combines the global rules with the current world's rules into one list, and rebuilds it whenever either set changes, so edits take effect on the next line. Triggers match the plain text of a line (colors stripped), so a pattern you copy from the screen always matches. Scrollback keeps 5,000 lines by default. When you scroll up, auto-scroll pauses and a “12 new lines ↓” chip appears.</p>
+  </div>
+</section>
+
+<section class="two">
+  <div class="stack">
+    <span class="eyebrow">Stack</span>
+    <h2>Tools</h2>
+    <ul class="plain">
+      <li>Kotlin, coroutines and Flow</li>
+      <li>Jetpack Compose with Material 3, edge-to-edge, <code>imePadding()</code> for the keyboard</li>
+      <li>Hilt for dependency injection</li>
+      <li>Room for worlds and rules. DataStore for settings</li>
+      <li>Navigation Compose with type-safe routes</li>
+      <li>kotlinx.serialization to export and import rules as JSON</li>
+      <li>JUnit, Turbine and Compose UI tests</li>
+      <li>Gradle version catalog. minSdk 26, targets the latest stable SDK</li>
+      <li>Permissions: internet, foreground service, notifications, Wi-Fi/wake lock</li>
+    </ul>
+  </div>
+  <div class="stack" style="min-width:0">
+    <span class="eyebrow">Modules</span>
+    <h2>Project layout</h2>
+<pre class="tree">tether/
+├─ app/                <span class="cm"># Android app: UI, data, service, DI</span>
+│  ├─ ui/              <span class="cm"># one package per screen</span>
+│  ├─ data/            <span class="cm"># Room, DataStore, repositories, session</span>
+│  └─ service/         <span class="cm"># foreground service, notifications</span>
+├─ mud/                <span class="cm"># pure Kotlin: telnet, ANSI, rules engine</span>
+└─ gradle/libs.versions.toml</pre>
+    <p style="font-size:.93rem;color:var(--muted)">Two modules. <code>mud</code> holds the protocol and rules logic with no Android dependencies, so it is tested fast on the JVM. Everything Android lives in <code>app</code>, organized by package. The build plan has the full package layout.</p>
+  </div>
+</section>
+
+<section class="col">
+  <span class="eyebrow">Build order</span>
+  <h2>Milestones</h2>
+  <p>The full build order, package layout and technical decisions are in the <a href="https://claude.ai/artifact/9ycRdjD5M8rNjiuH3LpHfG">Tether Build Plan</a>. In short: skeleton, protocol, worlds, live session, staying connected, display and settings, rules engine, rules screens, notifications, polish.</p>
+  <p class="out-scope"><b style="color:var(--ink)">Not in v1:</b> Lua or other scripting, several connections at once, maps, GMCP gauges, on-screen buttons of any kind.</p>
+</section>
+
+<section class="col">
+  <span class="eyebrow">Before we build</span>
+  <h2>Questions to confirm</h2>
+  <ol class="qs">
+    <li>Is this for the Play Store, or just installed on your phone?
+      <span class="def">Proposed: just your phone for now. Play reviews <code>specialUse</code> services and battery-optimization requests, which is extra paperwork.</span></li>
+    <li>Plain telnet only, or TLS as well?
+      <span class="def">Proposed: telnet in milestone 1, TLS in milestone 3.</span></li>
+    <li>Is one connection at a time enough?
+      <span class="def">Proposed: yes for v1. The data layer is built so more can be added later.</span></li>
+    <li>TinTin++-style commands: <code>#alias {k} {kill %1}</code>, <code>#action {%1 tells you: %2} {#notify}</code>?
+      <span class="def">Proposed: yes, with the braces optional for one-word arguments. Regex available in the editor.</span></li>
+    <li>Command history without buttons: swipe up and down on the text field to scroll through past commands?
+      <span class="def">Proposed: yes. It needs no extra buttons and doesn't touch Gboard.</span></li>
+    <li>Use <code>;</code> to separate several commands on one line?
+      <span class="def">Proposed: yes, with <code>\;</code> to send a literal semicolon.</span></li>
+    <li>When you type <code>#alias</code>, should it apply to this world only, with <code>#galias</code> for all worlds?
+      <span class="def">Proposed: yes. Per-character rules are the more common case mid-session, and the Rules screen can copy or move it later.</span></li>
+    <li>If a world alias and a global alias have the same name, does the world one win?
+      <span class="def">Proposed: yes. Triggers don't override each other: matching global and world triggers both fire.</span></li>
+    <li>Hide Android's status bar (clock, battery) in sessions to free one more line?
+      <span class="def">Proposed: off by default, one switch in Settings. Swipe down from the top to see it briefly.</span></li>
+    <li>Keep the name “Tether”?</li>
+  </ol>
+</section>
+
+</div>
+
+<script>
+(function () {
+  var kb = document.getElementById('kb');
+  if (!kb) return;
+  var rows = [
+    ['q','w','e','r','t','y','u','i','o','p'],
+    ['a','s','d','f','g','h','j','k','l'],
+    ['⇧','z','x','c','v','b','n','m','⌫'],
+    ['?123',',','space','.','➤']
+  ];
+  rows.forEach(function (r) {
+    var row = document.createElement('div');
+    row.className = 'row';
+    r.forEach(function (k) {
+      var el = document.createElement('span');
+      el.className = 'k';
+      if (k === 'space') { el.className += ' space'; el.textContent = ''; }
+      else if (k === '➤') { el.className += ' send'; el.textContent = k; }
+      else if (k.length > 1 || k === '⇧' || k === '⌫') { el.className += ' wide'; el.textContent = k; }
+      else el.textContent = k;
+      row.appendChild(el);
+    });
+    kb.appendChild(row);
+  });
+})();
+</script>

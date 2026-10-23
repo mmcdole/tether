@@ -1,0 +1,17 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- The launcher's "> _" in status-bar white. -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M5,6.5 L11,12 L5,17.5" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M13,16 L20,16 L20,18.2 L13,18.2 Z" />
+</vector>

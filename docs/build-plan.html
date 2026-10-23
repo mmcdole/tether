@@ -1,0 +1,422 @@
+<title>Tether Build Plan</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..800&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+/* Layout: one reading column; phases are the spine, each a block with goal, build list, and a done-when line. Same identity as the Tether design page. */
+:root {
+  --bg: #f3f4f6;
+  --surface: #ffffff;
+  --ink: #16181d;
+  --muted: #5b6170;
+  --rule: #d9dce3;
+  --accent: #2b55c9;
+  --accent-soft: #e3e9fb;
+  --ok: #1d7a3a;
+  --warn: #8a5a00;
+  --warn-bg: #fff4dc;
+  --code-bg: #0d0f13;
+  --code-fg: #e3e5ea;
+  --code-dim: #8b919e;
+  --code-key: #8cc8ff;
+  --code-type: #e5c07b;
+  --f-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111318; --surface: #191c22; --ink: #e8eaef; --muted: #9aa1b0; --rule: #2c313b;
+    --accent: #86a6ff; --accent-soft: #1f2a48; --ok: #6fd08c; --warn: #f2c46b; --warn-bg: #2e2410;
+    --code-bg: #0a0b0e;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111318; --surface: #191c22; --ink: #e8eaef; --muted: #9aa1b0; --rule: #2c313b;
+  --accent: #86a6ff; --accent-soft: #1f2a48; --ok: #6fd08c; --warn: #f2c46b; --warn-bg: #2e2410;
+  --code-bg: #0a0b0e;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--f-body); font-size: 17px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 80px;
+}
+.wrap { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(2.1rem, 5vw, 3rem); font-weight: 800; font-stretch: 112%; }
+h2 { font-size: 1.6rem; font-weight: 750; font-stretch: 105%; }
+h3 { font-size: 1.12rem; font-weight: 700; }
+p { margin: 0; }
+a { color: var(--accent); }
+code { font-family: var(--f-mono); font-size: 0.84em; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
+.eyebrow { font-family: var(--f-mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+section, header { display: flex; flex-direction: column; gap: 16px; }
+.lede { font-size: 1.15rem; color: var(--muted); max-width: 64ch; }
+.muted { color: var(--muted); }
+.small { font-size: 0.93rem; }
+ul.plain { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 7px; }
+
+pre.code { margin: 0; overflow-x: auto; background: var(--code-bg); color: var(--code-fg); border-radius: 10px; padding: 18px 20px; font-family: var(--f-mono); font-size: 0.78rem; line-height: 1.6; }
+pre.code .c { color: var(--code-dim); }
+pre.code .k { color: var(--code-key); }
+pre.code .t { color: var(--code-type); }
+
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 10px; background: var(--surface); }
+table { width: 100%; border-collapse: collapse; font-size: 0.93rem; }
+th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--rule); }
+tr:last-child td { border-bottom: 0; }
+th { font-family: var(--f-mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 400; background: var(--bg); }
+td:first-child { font-weight: 600; white-space: nowrap; }
+td.ph { font-family: var(--f-mono); font-variant-numeric: tabular-nums; color: var(--accent); white-space: nowrap; font-weight: 400; }
+
+.rules-of-thumb { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.rules-of-thumb > div { min-width: 0; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.yes h3 { color: var(--ok); }
+.no h3 { color: var(--muted); }
+
+.phases { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 18px; counter-reset: ph -1; }
+.phase { counter-increment: ph; background: var(--surface); border: 1px solid var(--rule); border-radius: 12px; padding: 22px; display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 0 16px; }
+.phase::before { content: counter(ph); font-family: var(--f-display); font-weight: 800; font-size: 2rem; color: var(--accent); line-height: 1; }
+.phase > div { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.phase .goal { color: var(--muted); }
+.phase .lbl { font-family: var(--f-mono); font-size: 0.7rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.phase ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.done { border-top: 1px dashed var(--rule); padding-top: 12px; font-size: 0.95rem; }
+.done b { color: var(--ok); }
+.gate { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 10px 12px; font-size: 0.93rem; }
+.gate b { font-weight: 600; }
+.screens { display: flex; flex-wrap: wrap; gap: 6px; }
+.screens span { font-size: 0.8rem; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--rule); color: var(--muted); }
+@media (max-width: 520px) { .phase { grid-template-columns: minmax(0,1fr); gap: 10px; } }
+</style>
+
+<div class="wrap">
+
+<header>
+  <span class="eyebrow">Tether · build plan</span>
+  <h1>Tether Build Plan</h1>
+  <p class="lede">How the app is structured, the decisions that shape the code, and ten phases to build it in order. Each phase ends with something you can install and use. The screens and requirements come from the <a href="https://claude.ai/artifact/XXHXp1DazKU2XaXqBvqXmy">Tether design page</a>.</p>
+</header>
+
+<section>
+  <span class="eyebrow">Approach</span>
+  <h2>Standard Android, kept small</h2>
+  <p>This follows Google's recommended app architecture: a UI layer of Compose screens and ViewModels, a data layer of repositories that own the app's state, data flowing one way, and Hilt wiring it together. It skips the parts that only pay off on large teams.</p>
+  <div class="rules-of-thumb">
+    <div class="yes">
+      <h3>Doing</h3>
+      <ul class="plain small">
+        <li>Two Gradle modules: <code>app</code> and a pure-Kotlin <code>mud</code> library</li>
+        <li>One Activity, Compose screens, type-safe Navigation</li>
+        <li>One ViewModel per screen, exposing a single <code>StateFlow&lt;UiState&gt;</code></li>
+        <li>Repositories as the single source of truth, backed by Room and DataStore</li>
+        <li>A <code>@Singleton SessionManager</code> owns the connection, independent of any screen</li>
+        <li>Constructor injection everywhere, dispatchers injected for tests</li>
+      </ul>
+    </div>
+    <div class="no">
+      <h3>Not doing</h3>
+      <ul class="plain small">
+        <li>Feature modules or a module per layer</li>
+        <li>A use-case class for every action. The real logic (parsing, rules) already lives in <code>mud</code></li>
+        <li>An interface for every repository. Only where a test needs a fake</li>
+        <li>MVI libraries, event buses, or a custom base ViewModel</li>
+        <li>Separate model classes per layer when one would do. Room entities map to <code>mud</code> models, and screens use those</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <span class="eyebrow">Structure</span>
+  <h2>Modules and packages</h2>
+  <p class="small muted">Package root <code>dev.tether</code> is a placeholder.</p>
+<pre class="code"><span class="k">mud/</span>                                  <span class="c"># Kotlin/JVM library. No Android imports. Fast unit tests.</span>
+  telnet/
+    TelnetParser.kt                    <span class="c"># bytes → text + commands; strips IAC sequences</span>
+    TelnetNegotiator.kt                <span class="c"># TTYPE/MTTS, NAWS, EOR, GA, CHARSET replies</span>
+    Mccp2.kt                           <span class="c"># zlib inflate stream (phase 9)</span>
+  ansi/
+    AnsiParser.kt                      <span class="c"># SGR state machine: 16 / 256 / truecolor, bold, ul, reverse</span>
+    StyledLine.kt                      <span class="c"># plain text + style spans; one per output line</span>
+  rules/
+    Rule.kt                            <span class="c"># Trigger, Alias, TriggerAction, Scope</span>
+    Pattern.kt                         <span class="c"># %1 wildcards or regex, compiled once</span>
+    TriggerEngine.kt                   <span class="c"># line → highlight / gag / send / notify / vibrate</span>
+    AliasExpander.kt                   <span class="c"># "k guard" → "kill guard"</span>
+    RuleSet.kt                         <span class="c"># merges global + world rules; world alias wins on name clash</span>
+  command/
+    CommandParser.kt                   <span class="c"># #alias #galias #action #gaction #unalias…, ; and \;</span>
+
+<span class="k">app/</span>
+  TetherApplication.kt                 <span class="c"># @HiltAndroidApp; starts SessionServiceLauncher</span>
+  MainActivity.kt                      <span class="c"># enableEdgeToEdge, setContent { TetherApp() }</span>
+  di/
+    AppModule.kt                       <span class="c"># @ApplicationScope CoroutineScope, dispatchers</span>
+    DataModule.kt                      <span class="c"># Room database, DAOs, DataStore</span>
+  data/
+    db/       TetherDatabase, WorldEntity, RuleEntity, WorldDao, RuleDao
+    world/    WorldRepository, LoginSecrets      <span class="c"># auto-login password encrypted with a Keystore key</span>
+    rules/    RuleRepository, RuleTransfer, RuleJson
+    settings/ SettingsRepository, AppSettings    <span class="c"># DataStore Preferences</span>
+    session/
+      SessionManager.kt                <span class="c"># @Singleton: connect, disconnect, send, state, scrollback</span>
+      MudConnection.kt                 <span class="c"># socket + read loop + write channel, uses mud/ parsers</span>
+      Scrollback.kt                    <span class="c"># ring buffer of StyledLine with stable ids</span>
+      NetworkMonitor.kt                <span class="c"># ConnectivityManager callback → reconnect signal</span>
+      ReconnectPolicy.kt               <span class="c"># backoff schedule</span>
+  service/
+    SessionService.kt                  <span class="c"># foreground service (specialUse), Wi-Fi lock</span>
+    SessionServiceLauncher.kt          <span class="c"># starts the service when a session becomes active</span>
+    SessionNotifications.kt            <span class="c"># channels, ongoing notification, trigger notifications</span>
+    ReplyReceiver.kt                   <span class="c"># RemoteInput reply → SessionManager.send()</span>
+  ui/
+    TetherApp.kt, TetherNavHost.kt, Routes.kt
+    theme/    Theme.kt, AnsiColors.kt, Type.kt
+    worlds/   WorldsScreen, WorldsViewModel, WorldEditScreen, WorldEditViewModel
+    session/  SessionScreen, SessionViewModel, OutputPane, CommandInput, TextSizeGesture
+    rules/    RulesScreen, RulesViewModel, RuleEditorSheet, CopyMoveSheet
+    settings/ SettingsScreen, SettingsViewModel</pre>
+  <p class="small muted">Rule of thumb: <code>mud</code> knows MUD protocols and rules, <code>data</code> knows where things are stored and owns the live session, <code>service</code> knows Android lifecycle and notifications, <code>ui</code> knows screens. Nothing in <code>data</code> imports from <code>service</code> or <code>ui</code>.</p>
+</section>
+
+<section>
+  <span class="eyebrow">Core types</span>
+  <h2>The shapes everything hangs on</h2>
+<pre class="code"><span class="c">// mud</span>
+<span class="k">data class</span> <span class="t">StyledLine</span>(val id: Long, val text: String, val spans: List&lt;StyleSpan&gt;, val isPrompt: Boolean)
+<span class="k">sealed interface</span> <span class="t">Scope</span> { <span class="k">data object</span> Global : Scope; <span class="k">data class</span> World(val worldId: Long) : Scope }
+<span class="k">data class</span> <span class="t">Trigger</span>(val id: Long, val scope: Scope, val pattern: Pattern, val actions: List&lt;TriggerAction&gt;,
+                   val enabled: Boolean, val group: String?, val replyTemplate: String?)
+<span class="k">data class</span> <span class="t">Alias</span>(val id: Long, val scope: Scope, val name: String, val expansion: String, val enabled: Boolean)
+
+<span class="c">// app/data</span>
+@Entity <span class="k">data class</span> <span class="t">RuleEntity</span>(@PrimaryKey(autoGenerate = true) val id: Long, val worldId: Long?,  <span class="c">// null = all worlds</span>
+                          val kind: RuleKind, val pattern: String, val isRegex: Boolean, val body: String, …)
+
+<span class="k">sealed interface</span> <span class="t">SessionState</span> {
+  <span class="k">data object</span> Idle : SessionState
+  <span class="k">data class</span> Connecting(val world: World) : SessionState
+  <span class="k">data class</span> Connected(val world: World, val since: Instant) : SessionState
+  <span class="k">data class</span> Reconnecting(val world: World, val attempt: Int) : SessionState
+}
+
+@Singleton <span class="k">class</span> <span class="t">SessionManager</span> @Inject constructor(…) {
+  val state: StateFlow&lt;SessionState&gt;
+  val scrollback: StateFlow&lt;ScrollbackSnapshot&gt;
+  fun connect(world: World); fun disconnect(); fun send(input: String); fun setColumns(cols: Int)
+}</pre>
+</section>
+
+<section>
+  <span class="eyebrow">Decisions</span>
+  <h2>How the tricky parts work</h2>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Concern</th><th>Decision</th></tr></thead>
+    <tbody>
+      <tr><td>Connection lifetime</td><td>The socket lives in <code>SessionManager</code>, scoped to the app process. Screens observe it and never own it. <code>SessionServiceLauncher</code> watches <code>SessionManager.state</code> and starts <code>SessionService</code> when a session becomes active. The service stops itself when the state returns to Idle. The data layer never references the service.</td></tr>
+      <tr><td>Threading</td><td>One read coroutine and one write channel per connection on an injected IO dispatcher. Parsing and triggers run off the main thread. The UI gets immutable snapshots.</td></tr>
+      <tr><td>Foreground service</td><td><code>foregroundServiceType="specialUse"</code>, because <code>dataSync</code> is time-limited on Android 15. Holds a <code>WifiLock</code> while connected. A partial wake lock is behind a setting, off by default.</td></tr>
+      <tr><td>Keepalive</td><td>TCP keepalive on the socket, plus <code>IAC NOP</code> after 60 s of silence.</td></tr>
+      <tr><td>Text selection</td><td>The output pane is wrapped in <code>SelectionContainer</code> and has no click, long-press, or double-tap handlers of its own. Pinch-to-resize only reacts when two fingers are down and never consumes one-finger events. While a long-press is in progress (observed, not consumed), the pane freezes its snapshot and counts new lines, so the selection doesn't move.</td></tr>
+      <tr><td>Output rendering</td><td>A <code>LazyColumn</code> with <code>reverseLayout</code>, keyed by line id, each line pre-built as an <code>AnnotatedString</code>. Scrollback is 5,000 lines by default. It follows new output only when you're at the bottom.</td></tr>
+      <tr><td>Input</td><td><code>BasicTextField</code> with <code>TextFieldState</code> and <code>lineLimits = SingleLine</code>, so it stays one line and scrolls sideways. <code>imeAction = Send</code>, and it keeps focus after sending. Autocorrect off by default. A vertical swipe on the field steps through command history. Horizontal touches are left to the field.</td></tr>
+      <tr><td>Keyboard</td><td><code>adjustResize</code>, edge-to-edge, <code>imePadding()</code> on the session layout. No custom IME, no accessory bar.</td></tr>
+      <tr><td>Text size and NAWS</td><td>Text size is one DataStore value. Pinch changes it live and saves on release. Columns are measured with a <code>TextMeasurer</code> from the pane width and font size, and are sent via NAWS (debounced) whenever either changes.</td></tr>
+      <tr><td>Rules resolution</td><td><code>RuleRepository</code> combines the Room flows for global rules and the current world's rules into a compiled <code>RuleSet</code>. <code>SessionManager</code> holds it as a <code>StateFlow</code>, so edits apply on the next line. Triggers match plain text with colors stripped.</td></tr>
+      <tr><td>Notifications</td><td>Two channels: Session (ongoing, low importance) and Messages (trigger notifications). Messages use <code>MessagingStyle</code>, grouped by the first capture (the sender). Reply uses <code>RemoteInput</code> with <code>setAuthenticationRequired(true)</code>, unless the trigger turns it off.</td></tr>
+      <tr><td>Navigation</td><td>Navigation Compose with <code>@Serializable</code> routes: <code>Worlds</code>, <code>WorldEdit(id?)</code>, <code>Session</code>, <code>Rules(worldId?)</code>, <code>Settings</code>.</td></tr>
+      <tr><td>Versions</td><td>Kotlin 2.x, Compose BOM, Material 3, Hilt + KSP, Room, DataStore, kotlinx.serialization, all through <code>libs.versions.toml</code>. minSdk 26, target the latest stable SDK.</td></tr>
+      <tr><td>Tests</td><td><code>mud</code>: plain JUnit with byte and text fixtures, most of the test effort. <code>app</code>: in-memory Room DAO tests, ViewModel tests with fakes and Turbine, a few Compose UI tests for the session screen. One manual acceptance check per phase.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <span class="eyebrow">Phases</span>
+  <h2>Build order</h2>
+  <p>Each phase depends on the ones before it. The first five make a client he can actually play on. The next three add rules and notifications. The last one is polish.</p>
+
+  <ol class="phases">
+    <li class="phase"><div>
+      <h3>Project skeleton</h3>
+      <p class="goal">An installable app with the right structure and nothing in it.</p>
+      <ul>
+        <li>Gradle setup with version catalog, <code>app</code> + <code>mud</code> modules, Hilt, KSP</li>
+        <li><code>TetherApplication</code>, <code>MainActivity</code> with edge-to-edge, <code>TetherNavHost</code> with placeholder screens</li>
+        <li>Black theme: <code>Theme.kt</code>, <code>AnsiColors.kt</code> (the 16-color palette), monospace <code>Type.kt</code></li>
+        <li>Lint and unit-test tasks running in one command</li>
+      </ul>
+      <p class="done"><b>Done when:</b> the app installs, opens to an empty black Worlds screen, and <code>./gradlew check</code> passes.</p>
+    </div></li>
+
+    <li class="phase"><div>
+      <h3>Protocol core</h3>
+      <p class="goal">Bytes from a MUD become colored lines, entirely in <code>mud</code>.</p>
+      <ul>
+        <li><code>TelnetParser</code>: IAC handling, split across reads, prompts via GA/EOR</li>
+        <li><code>TelnetNegotiator</code>: TTYPE with MTTS, NAWS, EOR, CHARSET (UTF-8, Latin-1 fallback)</li>
+        <li><code>AnsiParser</code> to <code>StyledLine</code>: 16, 256 and truecolor, bold-as-bright, underline, reverse, reset</li>
+        <li>Fixture tests built from captured real MUD output</li>
+      </ul>
+      <p class="done"><b>Done when:</b> captured output from his MUDs parses into the expected text and colors in tests.</p>
+    </div></li>
+
+    <li class="phase"><div>
+      <h3>Worlds</h3>
+      <p class="goal">Save the MUDs and characters to connect to.</p>
+      <ul>
+        <li>Room: <code>TetherDatabase</code>, <code>WorldEntity</code>, <code>WorldDao</code>. Exported schema, migrations from day one</li>
+        <li><code>WorldRepository</code>. <code>LoginSecrets</code> encrypts the auto-login password with an Android Keystore key</li>
+        <li>Worlds screen (list, +, gear) and World edit screen (name, host, port, TLS flag, auto-login lines), opened by long-pressing a world</li>
+      </ul>
+      <div class="screens"><span>Worlds</span><span>World edit</span></div>
+      <p class="done"><b>Done when:</b> worlds can be added, edited and deleted, and they survive a restart.</p>
+    </div></li>
+
+    <li class="phase"><div>
+      <h3>Live session</h3>
+      <p class="goal">Play a MUD while the app is open.</p>
+      <ul>
+        <li><code>MudConnection</code>, <code>Scrollback</code>, <code>SessionManager</code> with <code>SessionState</code></li>
+        <li>Session screen: top bar (world, dot, uptime, rules, ⋮), <code>OutputPane</code>, “N new lines ↓” chip</li>
+        <li><code>CommandInput</code>: one line, scrolls sideways, Send keeps the keyboard open, swipe for history</li>
+        <li>Text selection in the output with Copy and Select all, as described under Decisions</li>
+        <li>Auto-login lines sent after connect. <code>;</code> splits commands</li>
+      </ul>
+      <div class="gate"><b>Check before moving on:</b> load 5,000 lines of colored output and make sure selection works across several lines while output keeps arriving. If <code>SelectionContainer</code> over <code>LazyColumn</code> misbehaves, switch the output pane to a read-only <code>TextView</code> with <code>setTextIsSelectable(true)</code> inside <code>AndroidView</code>. That gives Android's own selection. The rest of the app stays the same.</div>
+      <div class="screens"><span>Session</span><span>Typing</span><span>Select and copy</span></div>
+      <p class="done"><b>Done when:</b> he can play for an hour with the screen on, colors are right, Gboard is untouched, and selecting text works without fighting the app.</p>
+    </div></li>
+
+    <li class="phase"><div>
+      <h3>Stay connected</h3>
+      <p class="goal">The main requirement: locking the screen doesn't drop the session.</p>
+      <ul>
+        <li><code>SessionService</code> (specialUse) with the ongoing notification: Open, Disconnect</li>
+        <li><code>SessionServiceLauncher</code>, <code>WifiLock</code>, TCP keepalive + <code>IAC NOP</code></li>
+        <li><code>NetworkMonitor</code> + <code>ReconnectPolicy</code>: reconnect with backoff, replay auto-login, dim “reconnected” line</li>
+        <li>First-run prompts for notifications (Android 13+) and battery optimization</li>
+        <li>Worlds screen: connected-world card with Open and Disconnect (tap again to confirm)</li>
+      </ul>
+      <div class="screens"><span>Worlds</span><span>Screen off</span></div>
+      <p class="done"><b>Done when:</b> connect, lock the phone for 8 hours on Wi-Fi, unlock, still connected, nothing missing. Then switch Wi-Fi off and on during a session and it reconnects by itself.</p>
+    </div></li>
+
+    <li class="phase"><div>
+      <h3>Display and settings</h3>
+      <p class="goal">Text size, more room for output, and the settings screen.</p>
+      <ul>
+        <li><code>SettingsRepository</code> on DataStore: text size, hide status bar, autocorrect, keep keyboard open, reconnect, Wi-Fi/CPU locks, scrollback size</li>
+        <li><code>TextSizeGesture</code>: pinch with the size/columns overlay, saved on release</li>
+        <li>Column measurement and NAWS updates on resize, rotation, keyboard open, and text size change</li>
+        <li>Hide status bar via <code>WindowInsetsControllerCompat</code>, swipe down to show briefly</li>
+        <li>Settings screen with a live text preview, opened from the Worlds gear and the session ⋮ menu</li>
+      </ul>
+      <div class="screens"><span>Text size</span><span>Settings</span></div>
+      <p class="done"><b>Done when:</b> pinching changes the size smoothly, the MUD wraps to the new width, and every setting persists.</p>
+    </div></li>
+
+    <li class="phase"><div>
+      <h3>Rules engine and commands</h3>
+      <p class="goal">Triggers and aliases work, created by typing.</p>
+      <ul>
+        <li><code>mud/rules</code>: <code>Pattern</code>, <code>TriggerEngine</code>, <code>AliasExpander</code>, <code>RuleSet</code>, all with tests</li>
+        <li><code>mud/command</code>: <code>CommandParser</code> for <code>#alias</code>, <code>#galias</code>, <code>#action</code>, <code>#gaction</code>, <code>#gag</code>, <code>#ggag</code>, <code>#unalias</code>, <code>#unaction</code>, <code>#ungag</code></li>
+        <li><code>RuleEntity</code> (nullable <code>worldId</code>), <code>RuleDao</code>, <code>RuleRepository</code> merging global and world flows</li>
+        <li>Wire into <code>SessionManager</code>: aliases on the way out, triggers on the way in. Echo confirmations like <code>#alias k = kill %1</code></li>
+        <li>Trigger actions: highlight, gag, send, vibrate. Notify is stored now and posted in phase 8</li>
+        <li>Gags: <code>#gag {pattern}</code> (this world), <code>#ggag</code> (all worlds), <code>#ungag</code>. A gagged line never reaches scrollback or the session log, but every other trigger on that line still runs, so a gag can also send or notify</li>
+      </ul>
+      <p class="done"><b>Done when:</b> <code>#alias k {kill %1}</code> mid-fight works on the next command, and a global and a world trigger both fire on the same line.</p>
+    </div></li>
+
+    <li class="phase"><div>
+      <h3>Rules screens</h3>
+      <p class="goal">Manage rules without typing.</p>
+      <ul>
+        <li>Rules screen: Triggers / Aliases tabs, the world box and the All worlds box, each with +, toggles, group tags, ▾ world switcher</li>
+        <li><code>RuleEditorSheet</code>: pattern, actions, applies to, Advanced (send, regex, group, priority, reply template)</li>
+        <li>Long-press a rule: Edit, Copy / move, Delete. <code>CopyMoveSheet</code> with multi-world destinations, plus a prompt when an alias name already exists. Logic lives in <code>RuleTransfer</code></li>
+        <li>Global rules row on the Worlds screen</li>
+      </ul>
+      <div class="screens"><span>Triggers &amp; aliases</span><span>New trigger</span><span>Copy or move a rule</span></div>
+      <p class="done"><b>Done when:</b> he can copy a rule from one character to two others in a few taps, and the change takes effect without reconnecting.</p>
+    </div></li>
+
+    <li class="phase"><div>
+      <h3>Trigger notifications and reply</h3>
+      <p class="goal">Know about tells with the screen off, and answer them.</p>
+      <ul>
+        <li>Notify action posts to the Messages channel using <code>MessagingStyle</code>, one conversation per sender</li>
+        <li>Reply template (<code>tell %1</code>) builds a <code>RemoteInput</code> action. Triggers without a template only get Open</li>
+        <li><code>ReplyReceiver</code> sends through <code>SessionManager</code>, queues the reply if reconnecting, and logs <code>[reply] …</code> in the session</li>
+        <li>Unlock required by default, can be turned off per trigger</li>
+      </ul>
+      <div class="screens"><span>Screen off</span></div>
+      <p class="done"><b>Done when:</b> a tell arrives with the phone locked, he replies from the lock screen, and the other player gets it.</p>
+    </div></li>
+
+    <li class="phase"><div>
+      <h3>Polish and release build</h3>
+      <p class="goal">Close the gaps before calling it v1.</p>
+      <ul>
+        <li>MCCP2 compression and TLS connections</li>
+        <li>Session log to a file, and rules export/import as JSON (<code>RuleJson</code>)</li>
+        <li>R8-minified release build, app icon, signing config</li>
+        <li>A full pass over the design page to confirm every screen matches</li>
+      </ul>
+      <p class="done"><b>Done when:</b> it replaces whatever client he uses today.</p>
+    </div></li>
+  </ol>
+</section>
+
+<section>
+  <span class="eyebrow">Coverage</span>
+  <h2>Every requirement has a phase</h2>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Requirement or screen</th><th>Phase</th></tr></thead>
+    <tbody>
+      <tr><td>Stays connected with the screen off</td><td class="ph">4</td></tr>
+      <tr><td>Colors (16 / 256 / truecolor)</td><td class="ph">1, 3</td></tr>
+      <tr><td>Black background, white text</td><td class="ph">0</td></tr>
+      <tr><td>Gboard untouched, no MUD buttons</td><td class="ph">3</td></tr>
+      <tr><td>One-line input that scrolls sideways</td><td class="ph">3</td></tr>
+      <tr><td>Text selection and copy in output</td><td class="ph">3</td></tr>
+      <tr><td>Adjustable text size</td><td class="ph">5</td></tr>
+      <tr><td>Maximum room for output</td><td class="ph">3, 5</td></tr>
+      <tr><td>Aliases and triggers added on the fly</td><td class="ph">6, 7</td></tr>
+      <tr><td>Global and per-world rules</td><td class="ph">6, 7</td></tr>
+      <tr><td>Gags</td><td class="ph">6, 7</td></tr>
+      <tr><td>Copy a rule to other worlds</td><td class="ph">7</td></tr>
+      <tr><td>Disconnect from the Worlds screen</td><td class="ph">4</td></tr>
+      <tr><td>Lock-screen notify and reply</td><td class="ph">8</td></tr>
+      <tr><td>Settings screen</td><td class="ph">5</td></tr>
+      <tr><td>World edit screen</td><td class="ph">2</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <span class="eyebrow">Risks</span>
+  <h2>What could go sideways</h2>
+  <ul class="plain">
+    <li><b>Text selection in Compose lists.</b> This is the biggest unknown, so it's checked in phase 3 with a fallback ready.</li>
+    <li><b>Phone makers that kill background apps</b> (some Samsung, Xiaomi, OnePlus settings). The battery prompt helps. The 8-hour test in phase 4 should run on his actual phone.</li>
+    <li><b>Gboard ignoring the no-autocorrect hint.</b> Some versions still suggest words. If so, he can switch it off in Gboard for this app.</li>
+    <li><b>Slow regex triggers.</b> Java regex has no timeout. Patterns compile on save, invalid ones are rejected in the editor, and lines over 4 KB skip regex triggers.</li>
+    <li><b>Play Store review.</b> Only matters if it gets published. Sideloading avoids <code>specialUse</code> review.</li>
+  </ul>
+  <p class="small muted">Not in v1: scripting, several sessions at once, maps, GMCP gauges, and making a trigger from an output line (dropped; long-press in the output is only for selecting text).</p>
+</section>
+
+</div>
