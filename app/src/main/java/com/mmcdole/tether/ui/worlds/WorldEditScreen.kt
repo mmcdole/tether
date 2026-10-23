@@ -133,8 +133,14 @@ fun WorldEditScreen(onDone: () -> Unit, onRules: (() -> Unit)?, viewModel: World
                 )
             }
 
-            GroupLabel("Login")
-            Field("Username", state.username, viewModel::onUsername, modifier = Modifier.focusRequester(username))
+            GroupLabel("Auto-login")
+            Field(
+                "Username",
+                state.username,
+                viewModel::onUsername,
+                modifier = Modifier.focusRequester(username),
+                placeholder = "Optional",
+            )
             Field(
                 "Password",
                 state.password,
@@ -143,7 +149,7 @@ fun WorldEditScreen(onDone: () -> Unit, onRules: (() -> Unit)?, viewModel: World
                 imeAction = ImeAction.Done,
                 onImeDone = viewModel::save,
                 hidden = true,
-                placeholder = if (state.hasSavedPassword) "Saved" else null,
+                placeholder = if (state.hasSavedPassword) "Saved" else "Optional",
                 trailing = if (state.hasSavedPassword || state.password.isNotEmpty()) {
                     { TextButton(onClick = viewModel::onClearPassword) { Text("Clear", color = TetherColors.AccentText) } }
                 } else {
