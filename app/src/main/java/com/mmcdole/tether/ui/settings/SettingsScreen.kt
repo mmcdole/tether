@@ -125,6 +125,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
 
             Section("Data")
             Scrollback(settings.scrollbackLines, viewModel::setScrollbackLines)
+            SwitchRow("Save session logs", settings.saveLogs, viewModel::setSaveLogs)
             RulesFile(viewModel::exportFileName, viewModel::exportRules, viewModel::importRules)
         }
     }

@@ -17,6 +17,7 @@ import com.mmcdole.tether.mud.rules.Trigger
 import com.mmcdole.tether.mud.rules.TriggerEngine
 import com.mmcdole.tether.mud.text.LineContent
 import com.mmcdole.tether.mud.text.LineKind
+import java.io.File
 import java.io.IOException
 import java.net.ConnectException
 import java.net.NoRouteToHostException
@@ -26,6 +27,7 @@ import java.time.Clock
 import javax.inject.Inject
 import javax.inject.Singleton
 import javax.net.ssl.SSLException
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -34,6 +36,7 @@ import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -62,6 +65,7 @@ class SessionManager @Inject constructor(
     private val policy: ReconnectPolicy,
     private val options: SessionOptionsSource,
     private val alerts: TriggerAlerts,
+    private val log: SessionLog,
     @ApplicationScope private val scope: CoroutineScope,
     @IoDispatcher private val io: CoroutineDispatcher,
     @DefaultDispatcher default: CoroutineDispatcher,
@@ -93,7 +97,7 @@ class SessionManager @Inject constructor(
     /** The rules for [world]: its own plus the global ones. Edits show up here before the next line. */
     val ruleSet: StateFlow<RuleSet> = _ruleSet.asStateFlow()
 
-    private val lines = Scrollback(options.options.value.scrollbackLines)
+    private val lines = Scrollback(options.options.value.scrollbackLines).also { it.listener = log }
 
     // `#` commands suspend on the database. This keeps typed input and incoming lines in order across that.
     private val commands = Mutex()
@@ -127,6 +131,22 @@ class SessionManager @Inject constructor(
                 publish()
             }
         }
+        // Turning logs on mid-session starts a file from there; turning them off closes it.
+        scope.launch(session) {
+            options.options.map { it.saveLogs }.distinctUntilChanged().collect { on ->
+                val world = _state.value.activeWorld
+                when {
+                    !on -> log.close()
+                    world != null && !log.isOpen -> log.start(world.name)
+                }
+            }
+        }
+        scope.launch(session) {
+            while (true) {
+                delay(LOG_FLUSH_INTERVAL)
+                log.flush()
+            }
+        }
     }
 
     fun connect(world: World) = onSession {
@@ -138,6 +158,8 @@ class SessionManager @Inject constructor(
             pendingReplies.clear()
         }
         _world.value = world
+        log.close()
+        if (options.options.value.saveLogs) log.start(world.name)
         // Loaded before connecting, so the first line already has this world's triggers.
         if (newWorld) _ruleSet.value = rules.observeRuleSet(world.id).first()
         _state.value = SessionState.Connecting(world)
@@ -229,6 +251,12 @@ class SessionManager @Inject constructor(
         pendingReplies.clear()
     }
 
+    /** The newest session log for the world on screen, written out so far, or null if there is none. */
+    suspend fun logToShare(): File? = withContext(session) {
+        log.flush()
+        _world.value?.let { log.latest(it.name) }
+    }
+
     fun setWindowSize(columns: Int, rows: Int) = onSession {
         this.columns = columns
         this.rows = rows
@@ -276,6 +304,7 @@ class SessionManager @Inject constructor(
             }
             if (end == ConnectionEnd.Closed || !options.options.value.autoReconnect) return stopped(message)
             lines.add(LineContent(message, emptyList()), LineKind.System)
+            log.flush()
             publish()
             attempt = retry(world, 1)
         }
@@ -491,6 +520,7 @@ class SessionManager @Inject constructor(
     private fun ended(message: String) {
         lines.add(LineContent(message, emptyList()), LineKind.System)
         dropPendingReplies()
+        log.close()
         _state.value = SessionState.Idle
         publish()
     }
@@ -511,6 +541,7 @@ class SessionManager @Inject constructor(
 
     private companion object {
         const val HISTORY_SIZE = 100
+        val LOG_FLUSH_INTERVAL = 5.seconds
         const val ALL_WORLDS = " (all worlds)"
     }
 }

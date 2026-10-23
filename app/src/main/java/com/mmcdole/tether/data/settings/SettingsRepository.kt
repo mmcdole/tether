@@ -41,6 +41,8 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
 
     suspend fun setCpuWakeLock(on: Boolean) = store.edit { it[CPU_WAKE_LOCK] = on }
 
+    suspend fun setSaveLogs(on: Boolean) = store.edit { it[SAVE_LOGS] = on }
+
     suspend fun setScrollbackLines(lines: Int) {
         require(lines in SCROLLBACK_CHOICES)
         store.edit { it[SCROLLBACK_LINES] = lines }
@@ -57,6 +59,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
             wifiLock = this[WIFI_LOCK] ?: defaults.wifiLock,
             cpuWakeLock = this[CPU_WAKE_LOCK] ?: defaults.cpuWakeLock,
             scrollbackLines = this[SCROLLBACK_LINES]?.takeIf { it in SCROLLBACK_CHOICES } ?: defaults.scrollbackLines,
+            saveLogs = this[SAVE_LOGS] ?: defaults.saveLogs,
         )
     }
 
@@ -71,5 +74,6 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
         val WIFI_LOCK = booleanPreferencesKey("wifi_lock")
         val CPU_WAKE_LOCK = booleanPreferencesKey("cpu_wake_lock")
         val SCROLLBACK_LINES = intPreferencesKey("scrollback_lines")
+        val SAVE_LOGS = booleanPreferencesKey("save_logs")
     }
 }

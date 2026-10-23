@@ -1,7 +1,9 @@
 package com.mmcdole.tether.ui.session
 
 import android.app.Activity
+import android.content.ClipData
 import android.content.Context
+import android.content.Intent
 import android.content.ContextWrapper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -35,6 +37,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,11 +46,13 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -56,6 +61,8 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mmcdole.tether.ui.theme.TetherColors
 import com.mmcdole.tether.ui.uptime
+import java.io.File
+import kotlinx.coroutines.launch
 
 @Composable
 fun SessionScreen(
@@ -66,6 +73,16 @@ fun SessionScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val hasLog by viewModel.hasLog.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val shareLog = {
+        scope.launch {
+            val file = viewModel.logToShare() ?: return@launch
+            context.startActivity(shareLogIntent(context, file))
+        }
+        Unit
+    }
     val hideStatusBar = settings?.hideStatusBar == true
     LifecycleResumeEffect(state.worldId) {
         viewModel.shown()
@@ -86,7 +103,14 @@ fun SessionScreen(
             .windowInsetsPadding(insets),
     ) {
         FirstRunPrompts()
-        TopBar(state, onDisconnect = viewModel::disconnect, onWorlds = onWorlds, onSettings = onSettings, onRules = onRules)
+        TopBar(
+            state,
+            onDisconnect = viewModel::disconnect,
+            onShareLog = shareLog.takeIf { hasLog },
+            onWorlds = onWorlds,
+            onSettings = onSettings,
+            onRules = onRules,
+        )
         val current = settings
         if (current == null) {
             Spacer(Modifier.weight(1f))
@@ -128,6 +152,18 @@ private fun HideStatusBar(hide: Boolean) {
     }
 }
 
+/** A chooser to send a session log file somewhere. */
+private fun shareLogIntent(context: Context, file: File): Intent {
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+    val send = Intent(Intent.ACTION_SEND)
+        .setType("text/plain")
+        .putExtra(Intent.EXTRA_STREAM, uri)
+        .putExtra(Intent.EXTRA_TITLE, file.name)
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    send.clipData = ClipData.newRawUri(file.name, uri)
+    return Intent.createChooser(send, null)
+}
+
 private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
@@ -138,6 +174,7 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 private fun TopBar(
     state: SessionUiState,
     onDisconnect: () -> Unit,
+    onShareLog: (() -> Unit)?,
     onWorlds: () -> Unit,
     onSettings: () -> Unit,
     onRules: (worldId: Long) -> Unit,
@@ -180,6 +217,9 @@ private fun TopBar(
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = TetherColors.SurfaceRaised) {
                 if (state.status != ConnectionStatus.Idle) {
                     DropdownMenuItem(text = { Text("Disconnect") }, onClick = { menu = false; onDisconnect() })
+                }
+                if (onShareLog != null) {
+                    DropdownMenuItem(text = { Text("Share log") }, onClick = { menu = false; onShareLog() })
                 }
                 DropdownMenuItem(text = { Text("Worlds") }, onClick = { menu = false; onWorlds() })
                 DropdownMenuItem(text = { Text("Settings") }, onClick = { menu = false; onSettings() })

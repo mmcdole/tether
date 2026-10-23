@@ -4,6 +4,7 @@ import com.mmcdole.tether.data.rules.FakeRuleDao
 import com.mmcdole.tether.data.rules.RuleRepository
 import com.mmcdole.tether.data.session.FakeNetworkMonitor
 import com.mmcdole.tether.data.session.FakeTriggerAlerts
+import com.mmcdole.tether.data.session.SessionLog
 import com.mmcdole.tether.data.session.FixedSessionOptions
 import com.mmcdole.tether.data.session.ReconnectPolicy
 import com.mmcdole.tether.data.session.SessionManager
@@ -11,6 +12,7 @@ import com.mmcdole.tether.data.world.FakeWorldDao
 import com.mmcdole.tether.data.world.World
 import com.mmcdole.tether.data.world.WorldRepository
 import com.mmcdole.tether.data.world.testSecrets
+import java.io.File
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -51,7 +53,7 @@ class WorldsViewModelTest {
         val rules = RuleRepository(FakeRuleDao(), clock, dispatcher)
         val session = SessionManager(
             repository, rules, { _, _, _ -> error("no network") }, FakeNetworkMonitor(), ReconnectPolicy(), FixedSessionOptions(),
-            FakeTriggerAlerts(), backgroundScope, dispatcher, StandardTestDispatcher(testScheduler), clock,
+            FakeTriggerAlerts(), SessionLog(File("build/unused-logs"), clock), backgroundScope, dispatcher, StandardTestDispatcher(testScheduler), clock,
         )
         val vm = WorldsViewModel(repository, rules, session, clock)
         backgroundScope.launch { vm.state.collect {} }

@@ -15,6 +15,7 @@ data class SessionOptions(
     val wifiLock: Boolean = true,
     val cpuWakeLock: Boolean = false,
     val scrollbackLines: Int = Scrollback.DEFAULT_CAPACITY,
+    val saveLogs: Boolean = false,
 )
 
 /** Where session options come from. */

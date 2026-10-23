@@ -2,13 +2,16 @@ package com.mmcdole.tether.ui.session
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.mmcdole.tether.data.session.SessionLog
 import com.mmcdole.tether.data.session.SessionManager
 import com.mmcdole.tether.data.session.SessionState
 import com.mmcdole.tether.data.session.TriggerAlerts
 import com.mmcdole.tether.data.settings.AppSettings
 import com.mmcdole.tether.data.settings.SettingsRepository
 import com.mmcdole.tether.di.DefaultDispatcher
+import com.mmcdole.tether.di.IoDispatcher
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.io.File
 import java.time.Instant
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
@@ -39,8 +42,17 @@ class SessionViewModel @Inject constructor(
     private val session: SessionManager,
     private val settingsRepository: SettingsRepository,
     private val alerts: TriggerAlerts,
+    log: SessionLog,
     @DefaultDispatcher default: CoroutineDispatcher,
+    @IoDispatcher io: CoroutineDispatcher,
 ) : ViewModel() {
+    /** Whether there's a log to share for the world on screen. */
+    val hasLog: StateFlow<Boolean> = combine(session.world, log.current) { world, _ ->
+        world != null && log.latest(world.name) != null
+    }.flowOn(io).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    suspend fun logToShare(): File? = session.logToShare()
+
     private var rendered = emptyList<OutputLine>()
 
     // Styling happens off the main thread, and only for lines that are new or changed.

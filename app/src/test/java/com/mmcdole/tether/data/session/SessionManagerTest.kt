@@ -14,9 +14,11 @@ import com.mmcdole.tether.mud.rules.Trigger
 import com.mmcdole.tether.mud.text.LineKind
 import com.mmcdole.tether.mud.text.StyledLine
 import java.time.Clock
+import kotlin.io.path.createTempDirectory
 import java.util.zip.Deflater
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +50,8 @@ class SessionManagerTest {
     private val thisWorld = Scope.World(plainWorld.id)
     private val network = FakeNetworkMonitor()
     private val clock = AdvancingClock()
+    private val logDir = createTempDirectory("logs").toFile()
+    private val log = SessionLog(logDir, clock)
 
     private fun manager(
         factory: MudSocketFactory = server.factory,
@@ -57,14 +61,17 @@ class SessionManagerTest {
         source: FixedSessionOptions = FixedSessionOptions(options),
     ) = SessionManager(
         repository, rules, factory, network, ReconnectPolicy(listOf(retryDelay), maxAttempts), source,
-        alerts, scope, Dispatchers.IO, Dispatchers.Default, clock,
+        alerts, log, scope, Dispatchers.IO, Dispatchers.Default, clock,
     )
 
     private suspend fun SessionManager.awaitState(predicate: (SessionState) -> Boolean): SessionState =
         withTimeout(2_000) { state.first(predicate) }
 
     @After
-    fun tearDown() = scope.cancel()
+    fun tearDown() {
+        scope.cancel()
+        logDir.deleteRecursively()
+    }
 
     private suspend fun SessionManager.awaitLines(predicate: (List<StyledLine>) -> Boolean): List<StyledLine> =
         withTimeout(2_000) { scrollback.first { predicate(it.lines) }.lines }
@@ -576,6 +583,61 @@ class SessionManagerTest {
         assertEquals(ReplyResult.Queued, manager.reply(plainWorld.id, "tell Hagbard hi"))
         manager.disconnect()
         manager.awaitTexts("Disconnected: Connection reset", "Disconnected", "Reply not sent: tell Hagbard hi")
+    }
+
+    @Test
+    fun sessionLogHasThePlainTextOfEveryShownLineButNotGagsOrThePassword() = runBlocking<Unit> {
+        rules.save(Trigger(0, thisWorld, "spam", gag = true))
+        val id = repository.save(plainWorld.copy(id = 0, username = "drake"), PasswordEdit.Set("hunter2"))
+        val manager = manager(options = SessionOptions(saveLogs = true)).connected(repository.get(id)!!)
+        login(manager)
+        server.send("\u001b[1;31mRed\u001b[0m dragon\r\nspam spam\r\nHP > ".toByteArray() + GA)
+        manager.awaitLines { it.lastOrNull()?.kind == LineKind.Prompt }
+        manager.send("look")
+        assertEquals("look", server.awaitLine())
+        manager.send("n;e")
+        server.awaitLine()
+        server.awaitLine()
+        manager.disconnect()
+        manager.awaitState { it == SessionState.Idle }
+
+        val file = withTimeout(2_000) { log.current.first { it != null }!! }
+        assertEquals(
+            listOf("By what name do you wish to be known? drake", "Password: ", "Welcome!", "Red dragon", "HP > look", "n", "e", "Disconnected"),
+            file.readLines(),
+        )
+        assertFalse("hunter2" in file.readText())
+        assertTrue(file.name.startsWith("Test MUD-"))
+        assertEquals(file, manager.logToShare())
+    }
+
+    @Test
+    fun noLogWhenTheSettingIsOff() = runBlocking<Unit> {
+        val manager = manager().connected()
+        server.send("Hello\r\n")
+        manager.awaitTexts("Hello")
+        manager.disconnect()
+        manager.awaitState { it == SessionState.Idle }
+        assertNull(manager.logToShare())
+        assertTrue(logDir.listFiles().isNullOrEmpty())
+    }
+
+    @Test
+    fun eachSessionGetsItsOwnFile() = runBlocking<Unit> {
+        val manager = manager(options = SessionOptions(saveLogs = true)).connected()
+        server.send("first\r\n")
+        manager.awaitTexts("first")
+        manager.disconnect()
+        manager.awaitState { it == SessionState.Idle }
+        val first = log.current.value!!
+        clock.advance(2.minutes)
+        manager.connected()
+        server.send("second\r\n")
+        manager.awaitLines { lines -> lines.any { it.text == "second" } }
+        val second = manager.logToShare()!!
+        assertTrue(first != second)
+        assertEquals(listOf("first", "Disconnected"), first.readLines())
+        assertEquals(listOf("second"), second.readLines())
     }
 
     private suspend fun login(manager: SessionManager) {

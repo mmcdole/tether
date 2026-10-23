@@ -58,6 +58,8 @@ class SettingsViewModel @Inject constructor(
 
     fun setScrollbackLines(lines: Int) = save { settings.setScrollbackLines(lines) }
 
+    fun setSaveLogs(on: Boolean) = save { settings.setSaveLogs(on) }
+
     fun exportFileName() = rulesFileName(LocalDate.now(clock))
 
     fun exportRules(uri: Uri) {

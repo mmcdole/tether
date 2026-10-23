@@ -12,6 +12,7 @@ import com.mmcdole.tether.data.db.WorldDao
 import com.mmcdole.tether.data.session.AndroidNetworkMonitor
 import com.mmcdole.tether.data.session.MudSocketFactory
 import com.mmcdole.tether.data.session.NetworkMonitor
+import com.mmcdole.tether.data.session.SessionLog
 import com.mmcdole.tether.data.session.TcpSocketFactory
 import com.mmcdole.tether.data.session.TriggerAlerts
 import com.mmcdole.tether.data.settings.SessionOptionsSource
@@ -22,6 +23,8 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import java.io.File
+import java.time.Clock
 import javax.inject.Singleton
 
 @Module
@@ -53,6 +56,11 @@ object DataModule {
 
     @Provides
     fun provideTriggerAlerts(alerts: AndroidTriggerAlerts): TriggerAlerts = alerts
+
+    @Provides
+    @Singleton
+    fun provideSessionLog(@ApplicationContext context: Context, clock: Clock): SessionLog =
+        SessionLog(File(context.filesDir, "logs"), clock)
 
     @Provides
     @Singleton

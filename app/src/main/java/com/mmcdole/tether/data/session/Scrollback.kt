@@ -11,6 +11,14 @@ class ScrollbackSnapshot(val lines: List<StyledLine>) {
     }
 }
 
+/** Hears about each line as the scrollback gets it, like the session log. */
+interface ScrollbackListener {
+    fun added(line: StyledLine)
+
+    /** [line] took the place of the newest line, keeping its id. */
+    fun replaced(line: StyledLine)
+}
+
 /**
  * The last [capacity] lines of a session. Ids only ever increase, even across [clear],
  * so the screen can key lines by id.
@@ -32,10 +40,13 @@ class Scrollback(capacity: Int = DEFAULT_CAPACITY) {
 
     val last: StyledLine? get() = lines.lastOrNull()
 
+    var listener: ScrollbackListener? = null
+
     fun add(content: LineContent, kind: LineKind = LineKind.Output, echoStart: Int = -1, highlight: Int? = null): StyledLine {
         val line = StyledLine(nextId++, content.text, content.spans, kind, highlight, echoStart)
         if (lines.size >= capacity) lines.removeFirst()
         lines.addLast(line)
+        listener?.added(line)
         return line
     }
 
@@ -43,6 +54,7 @@ class Scrollback(capacity: Int = DEFAULT_CAPACITY) {
     fun replaceLast(line: StyledLine) {
         check(line.id == lines.last().id)
         lines[lines.lastIndex] = line
+        listener?.replaced(line)
     }
 
     fun clear() = lines.clear()

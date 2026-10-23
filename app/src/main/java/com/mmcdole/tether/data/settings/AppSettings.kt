@@ -12,9 +12,10 @@ data class AppSettings(
     val wifiLock: Boolean = true,
     val cpuWakeLock: Boolean = false,
     val scrollbackLines: Int = Scrollback.DEFAULT_CAPACITY,
+    val saveLogs: Boolean = false,
 ) {
     val sessionOptions: SessionOptions
-        get() = SessionOptions(autoReconnect, wifiLock, cpuWakeLock, scrollbackLines)
+        get() = SessionOptions(autoReconnect, wifiLock, cpuWakeLock, scrollbackLines, saveLogs)
 
     companion object {
         const val MIN_TEXT_SIZE = 8
