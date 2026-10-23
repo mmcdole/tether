@@ -37,5 +37,9 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Persistent telnet connection to a MUD game server" />
         </service>
+
+        <receiver
+            android:name=".service.ReplyReceiver"
+            android:exported="false" />
     </application>
 </manifest>

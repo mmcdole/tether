@@ -52,6 +52,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.mmcdole.tether.ui.theme.TetherColors
 import com.mmcdole.tether.ui.uptime
@@ -66,6 +67,10 @@ fun SessionScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val hideStatusBar = settings?.hideStatusBar == true
+    LifecycleResumeEffect(state.worldId) {
+        viewModel.shown()
+        onPauseOrDispose {}
+    }
     HideStatusBar(hideStatusBar)
     // safeDrawing includes the keyboard, so the output shrinks to sit above it. With the
     // status bar hidden the top bar moves up into its space, cutout included.

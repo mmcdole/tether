@@ -16,4 +16,10 @@ class FakeTriggerAlerts : TriggerAlerts {
     override fun notify(world: World, request: NotifyRequest) {
         notifications += world to request
     }
+
+    val cleared = CopyOnWriteArrayList<Long>()
+
+    override fun clearNotifications(worldId: Long) {
+        cleared += worldId
+    }
 }

@@ -8,4 +8,7 @@ interface TriggerAlerts {
     fun vibrate()
 
     fun notify(world: World, request: NotifyRequest)
+
+    /** Clears [worldId]'s message notifications, as when its session is opened. */
+    fun clearNotifications(worldId: Long)
 }

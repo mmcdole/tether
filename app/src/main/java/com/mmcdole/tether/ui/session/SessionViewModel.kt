@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mmcdole.tether.data.session.SessionManager
 import com.mmcdole.tether.data.session.SessionState
+import com.mmcdole.tether.data.session.TriggerAlerts
 import com.mmcdole.tether.data.settings.AppSettings
 import com.mmcdole.tether.data.settings.SettingsRepository
 import com.mmcdole.tether.di.DefaultDispatcher
@@ -37,6 +38,7 @@ data class SessionUiState(
 class SessionViewModel @Inject constructor(
     private val session: SessionManager,
     private val settingsRepository: SettingsRepository,
+    private val alerts: TriggerAlerts,
     @DefaultDispatcher default: CoroutineDispatcher,
 ) : ViewModel() {
     private var rendered = emptyList<OutputLine>()
@@ -85,6 +87,11 @@ class SessionViewModel @Inject constructor(
     fun send(input: String) = session.send(input)
 
     fun disconnect() = session.disconnect()
+
+    /** The session is on screen, so its world's message notifications have been seen. */
+    fun shown() {
+        session.world.value?.let { alerts.clearNotifications(it.id) }
+    }
 
     fun reconnect() = session.reconnect()
 

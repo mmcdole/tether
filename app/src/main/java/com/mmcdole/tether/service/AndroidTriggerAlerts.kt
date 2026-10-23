@@ -40,8 +40,9 @@ class AndroidTriggerAlerts @Inject constructor(
         }
     }
 
-    // Phase 8 turns this into a conversation with Reply.
-    override fun notify(world: World, request: NotifyRequest) = notifications.message(request.title, request.message)
+    override fun notify(world: World, request: NotifyRequest) = notifications.received(world, request)
+
+    override fun clearNotifications(worldId: Long) = notifications.clearWorld(worldId)
 
     private companion object {
         const val VIBRATE_MS = 200L

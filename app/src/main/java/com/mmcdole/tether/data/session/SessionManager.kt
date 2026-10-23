@@ -45,6 +45,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * Owns the one live MUD session: the connection, its scrollback, auto-login, rules, and
@@ -100,6 +101,11 @@ class SessionManager @Inject constructor(
     private var connection: MudConnection? = null
     private var job: Job? = null
     private var login: Login? = null
+    // Notification replies waiting for the connection to come back and log in.
+    private val pendingReplies = ArrayList<String>()
+
+    // False from connecting until auto-login is through; replies wait until then.
+    private var loggedIn = false
     private var columns = 80
     private var rows = 24
 
@@ -129,6 +135,7 @@ class SessionManager @Inject constructor(
         if (newWorld) {
             lines.clear()
             _history.value = emptyList()
+            pendingReplies.clear()
         }
         _world.value = world
         // Loaded before connecting, so the first line already has this world's triggers.
@@ -178,6 +185,48 @@ class SessionManager @Inject constructor(
             perform(steps, conn, world)
         }
         publish()
+    }
+
+    /**
+     * Sends a reply from a notification, already composed by [replyCommand]. It goes to the MUD
+     * as one command: not split on `;`, no aliases, since it's chat. Queued while reconnecting.
+     */
+    suspend fun reply(worldId: Long, command: String): ReplyResult = withContext(session) {
+        commands.withLock {
+            val state = _state.value
+            val conn = connection
+            when {
+                state.activeWorld?.id != worldId -> ReplyResult.NotConnected
+                conn != null && loggedIn && pendingReplies.isEmpty() -> {
+                    sendReply(conn, command)
+                    publish()
+                    ReplyResult.Sent
+                }
+                else -> {
+                    pendingReplies += command
+                    ReplyResult.Queued
+                }
+            }
+        }
+    }
+
+    private fun sendReply(conn: MudConnection, command: String) {
+        conn.sendLine(command)
+        lines.add(LineContent("[reply] $command", emptyList()), LineKind.Echo)
+    }
+
+    /** Sends the replies that waited for the connection. */
+    private fun sendPendingReplies(conn: MudConnection) {
+        if (pendingReplies.isEmpty()) return
+        for (command in pendingReplies) sendReply(conn, command)
+        pendingReplies.clear()
+        publish()
+    }
+
+    /** Drops the waiting replies, with a line for each so you know. */
+    private fun dropPendingReplies() {
+        for (command in pendingReplies) lines.add(LineContent("Reply not sent: $command", emptyList()), LineKind.System)
+        pendingReplies.clear()
     }
 
     fun setWindowSize(columns: Int, rows: Int) = onSession {
@@ -254,6 +303,15 @@ class SessionManager @Inject constructor(
         }
         _state.value = SessionState.Connected(world, clock.instant())
         scope.launch { worlds.markConnected(world.id) }
+        // Without auto-login a fresh connection sits at the login prompt, where a queued tell
+        // would be taken as a name. Replies only wait for worlds that log in by themselves.
+        if (login?.step == Login.Step.Done) {
+            commands.withLock {
+                dropPendingReplies()
+                loggedIn = true
+            }
+            publish()
+        }
 
         return try {
             coroutineScope {
@@ -274,7 +332,15 @@ class SessionManager @Inject constructor(
             when (val result = conn.read()) {
                 is Received -> {
                     val echoWasOn = _serverEcho.value
-                    commands.withLock { apply(result, conn, world) }
+                    // The first output after the password went in: the character is in the game.
+                    val loginDone = !loggedIn && login?.step == Login.Step.Done && result.hasOutput
+                    commands.withLock {
+                        apply(result, conn, world)
+                        if (loginDone) {
+                            loggedIn = true
+                            sendPendingReplies(conn)
+                        }
+                    }
                     autoLogin(conn, result, echoTurnedOn = !echoWasOn && conn.serverEcho)
                 }
                 is ConnectionEnd -> return result
@@ -305,16 +371,15 @@ class SessionManager @Inject constructor(
 
     private suspend fun autoLogin(conn: MudConnection, received: Received, echoTurnedOn: Boolean) {
         val login = login ?: return
-        val output = received.lines.isNotEmpty() || received.partial.text.isNotEmpty()
         when (login.step) {
-            Login.Step.Username -> if (output) {
+            Login.Step.Username -> if (received.hasOutput) {
                 val username = login.world.username.orEmpty()
                 conn.sendLine(username)
                 if (!conn.serverEcho) echo(conn, username)
                 publish()
                 login.step = if (login.world.hasPassword) Login.Step.Password else Login.Step.Done
             }
-            Login.Step.Password -> if (output || echoTurnedOn) {
+            Login.Step.Password -> if (received.hasOutput || echoTurnedOn) {
                 login.step = Login.Step.Done
                 val password = worlds.password(login.world.id)
                 if (connection !== conn) return
@@ -415,6 +480,7 @@ class SessionManager @Inject constructor(
         connection?.close()
         connection = null
         login = null
+        loggedIn = false
         boundNetwork = null
         _serverEcho.value = false
         // Keep an unfinished prompt in the scrollback instead of losing it.
@@ -424,6 +490,7 @@ class SessionManager @Inject constructor(
 
     private fun ended(message: String) {
         lines.add(LineContent(message, emptyList()), LineKind.System)
+        dropPendingReplies()
         _state.value = SessionState.Idle
         publish()
     }
@@ -447,6 +514,8 @@ class SessionManager @Inject constructor(
         const val ALL_WORLDS = " (all worlds)"
     }
 }
+
+private val Received.hasOutput: Boolean get() = lines.isNotEmpty() || partial.text.isNotEmpty()
 
 /** A trigger as one line for `#action` with no arguments, like `{The %1 slashes you.} = flee`. */
 private fun Trigger.describe(): String {

@@ -514,6 +514,70 @@ class SessionManagerTest {
         assertEquals(listOf("Password: "), manager.scrollback.value.lines.map { it.text })
     }
 
+    @Test
+    fun replyGoesOutAsOneCommandAndShowsDim() = runBlocking<Unit> {
+        rules.save(Alias(0, thisWorld, "tell", "nope"))
+        val manager = manager().connected()
+        assertEquals(ReplyResult.Sent, manager.reply(plainWorld.id, "tell Hagbard sure; omw"))
+        assertEquals("tell Hagbard sure; omw", server.awaitLine())
+        assertTrue(server.noMoreLines())
+        val line = manager.awaitTexts("[reply] tell Hagbard sure; omw").single()
+        assertEquals(LineKind.Echo, line.kind)
+        assertTrue(manager.history.value.isEmpty())
+    }
+
+    @Test
+    fun replyWhileIdleOrForAnotherWorldIsNotSent() = runBlocking<Unit> {
+        val manager = manager()
+        assertEquals(ReplyResult.NotConnected, manager.reply(plainWorld.id, "tell Hagbard hi"))
+        manager.connected()
+        assertEquals(ReplyResult.NotConnected, manager.reply(plainWorld.id + 1, "tell Hagbard hi"))
+        manager.disconnect()
+        manager.awaitState { it == SessionState.Idle }
+        assertEquals(ReplyResult.NotConnected, manager.reply(plainWorld.id, "tell Hagbard hi"))
+        assertTrue(server.noMoreLines())
+        assertFalse(manager.scrollback.value.lines.any { "[reply]" in it.text })
+    }
+
+    @Test
+    fun replyWhileReconnectingWaitsForAutoLogin() = runBlocking<Unit> {
+        val id = repository.save(plainWorld.copy(id = 0, username = "drake"), PasswordEdit.Set("hunter2"))
+        val world = repository.get(id)!!
+        val manager = manager(retryDelay = 300.milliseconds).connected(world)
+        login(manager)
+        server.reset()
+        manager.awaitState { it is SessionState.Reconnecting }
+
+        assertEquals(ReplyResult.Queued, manager.reply(id, "tell Hagbard sure, omw"))
+        manager.awaitState { it is SessionState.Connected }
+        login(manager)
+        assertEquals("tell Hagbard sure, omw", server.awaitLine())
+        val texts = manager.awaitLines { lines -> lines.any { it.text == "[reply] tell Hagbard sure, omw" } }.map { it.text }
+        assertTrue(texts.lastIndexOf("Welcome!") < texts.indexOf("[reply] tell Hagbard sure, omw"))
+        assertTrue(texts.indexOf("Reconnected") < texts.lastIndexOf("Welcome!"))
+    }
+
+    @Test
+    fun queuedReplyIsDroppedWithoutAutoLogin() = runBlocking<Unit> {
+        val manager = manager(retryDelay = 300.milliseconds).connected()
+        server.reset()
+        manager.awaitState { it is SessionState.Reconnecting }
+        assertEquals(ReplyResult.Queued, manager.reply(plainWorld.id, "tell Hagbard hi"))
+        manager.awaitState { it is SessionState.Connected }
+        manager.awaitLines { lines -> lines.any { it.text == "Reply not sent: tell Hagbard hi" } }
+        assertTrue(server.noMoreLines())
+    }
+
+    @Test
+    fun queuedReplyIsDroppedWhenTheSessionEnds() = runBlocking<Unit> {
+        val manager = manager(retryDelay = 5.seconds).connected()
+        server.reset()
+        manager.awaitState { it is SessionState.Reconnecting }
+        assertEquals(ReplyResult.Queued, manager.reply(plainWorld.id, "tell Hagbard hi"))
+        manager.disconnect()
+        manager.awaitTexts("Disconnected: Connection reset", "Disconnected", "Reply not sent: tell Hagbard hi")
+    }
+
     private suspend fun login(manager: SessionManager) {
         server.send("By what name do you wish to be known? ")
         assertEquals("drake", server.awaitLine())
