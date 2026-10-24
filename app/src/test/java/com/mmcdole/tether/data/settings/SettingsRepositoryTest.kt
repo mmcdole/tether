@@ -39,7 +39,7 @@ class SettingsRepositoryTest {
         assertEquals(true, settings.keepKeyboardOpen)
         assertEquals(true, settings.autoReconnect)
         assertEquals(true, settings.wifiLock)
-        assertEquals(false, settings.cpuWakeLock)
+        assertEquals(true, settings.cpuWakeLock)
         assertEquals(5_000, settings.scrollbackLines)
     }
 
@@ -51,7 +51,7 @@ class SettingsRepositoryTest {
         repository.setKeepKeyboardOpen(false)
         repository.setAutoReconnect(false)
         repository.setWifiLock(false)
-        repository.setCpuWakeLock(true)
+        repository.setCpuWakeLock(false)
         repository.setScrollbackLines(20_000)
         val expected = AppSettings(
             textSize = 17,
@@ -60,11 +60,11 @@ class SettingsRepositoryTest {
             keepKeyboardOpen = false,
             autoReconnect = false,
             wifiLock = false,
-            cpuWakeLock = true,
+            cpuWakeLock = false,
             scrollbackLines = 20_000,
         )
         assertEquals(expected, repository.settings.first())
-        assertEquals(SessionOptions(autoReconnect = false, wifiLock = false, cpuWakeLock = true, scrollbackLines = 20_000), expected.sessionOptions)
+        assertEquals(SessionOptions(autoReconnect = false, wifiLock = false, cpuWakeLock = false, scrollbackLines = 20_000), expected.sessionOptions)
     }
 
     @Test
@@ -93,7 +93,7 @@ class SettingsRepositoryTest {
         repository.setWifiLock(false)
         repository.setScrollbackLines(1_000)
         withTimeout(2_000) { source.options.first { !it.wifiLock && it.scrollbackLines == 1_000 } }
-        repository.setCpuWakeLock(true)
-        withTimeout(2_000) { source.options.first { it.cpuWakeLock } }
+        repository.setCpuWakeLock(false)
+        withTimeout(2_000) { source.options.first { !it.cpuWakeLock } }
     }
 }

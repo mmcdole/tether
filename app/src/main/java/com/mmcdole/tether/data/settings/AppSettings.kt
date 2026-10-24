@@ -10,7 +10,7 @@ data class AppSettings(
     val keepKeyboardOpen: Boolean = true,
     val autoReconnect: Boolean = true,
     val wifiLock: Boolean = true,
-    val cpuWakeLock: Boolean = false,
+    val cpuWakeLock: Boolean = true,
     val scrollbackLines: Int = Scrollback.DEFAULT_CAPACITY,
     val saveLogs: Boolean = false,
 ) {
