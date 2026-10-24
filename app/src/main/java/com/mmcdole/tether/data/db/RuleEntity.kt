@@ -40,4 +40,6 @@ data class RuleEntity(
     @ColumnInfo(defaultValue = "0") val intervalMillis: Long = 0,
     /** A trigger copies the line to the chat tray. */
     @ColumnInfo(defaultValue = "0") val chat: Boolean = false,
+    /** What a Chat trigger shows in the tray instead of the line, with `%N`. */
+    val chatText: String? = null,
 )

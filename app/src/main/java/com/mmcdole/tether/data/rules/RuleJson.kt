@@ -134,6 +134,7 @@ private data class JsonTrigger(
     val replyTemplate: String? = null,
     val replyRequiresUnlock: Boolean = true,
     val chat: Boolean = false,
+    val chatText: String? = null,
 ) {
     /** Version 1 files kept gags as triggers that only gag; with [oldGags] those come in as gags. */
     fun toEntity(worldId: Long?, createdAt: Long, oldGags: Boolean): RuleEntity {
@@ -158,6 +159,7 @@ private data class JsonTrigger(
         replyRequiresUnlock = replyRequiresUnlock,
         createdAt = createdAt,
         chat = chat,
+        chatText = chatText,
     )
 }
 
@@ -236,6 +238,7 @@ private fun RuleEntity.toJsonTrigger(world: String?) = JsonTrigger(
     replyTemplate = replyTemplate,
     replyRequiresUnlock = replyRequiresUnlock,
     chat = chat,
+    chatText = chatText,
 )
 
 private fun RuleEntity.toJsonAlias(world: String?) = JsonAlias(world, pattern, body.orEmpty(), enabled, group)

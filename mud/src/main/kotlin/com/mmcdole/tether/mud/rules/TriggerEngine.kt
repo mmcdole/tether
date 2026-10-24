@@ -12,6 +12,9 @@ data class NotifyRequest(
     val replyRequiresUnlock: Boolean,
 )
 
+/** What a Chat trigger puts in the chat tray: the line from [start] on, or [text] when it has a Chat text. */
+data class ChatCopy(val start: Int, val text: String? = null)
+
 /** Everything the matching triggers want done with one line. */
 data class TriggerResult(
     val gag: Boolean = false,
@@ -20,8 +23,8 @@ data class TriggerResult(
     val commands: List<String> = emptyList(),
     val vibrate: Boolean = false,
     val notifications: List<NotifyRequest> = emptyList(),
-    /** Copy the line to the chat tray. */
-    val chat: Boolean = false,
+    /** From the first matching Chat trigger. */
+    val chat: ChatCopy? = null,
 ) {
     val isEmpty: Boolean get() = this == None
 
@@ -40,7 +43,7 @@ object TriggerEngine {
      */
     fun run(rules: RuleSet, line: String, worldName: String): TriggerResult {
         var gag = false
-        var chat = false
+        var chat: ChatCopy? = null
         var highlight: Int? = null
         var vibrate = false
         val commands = ArrayList<String>()
@@ -49,17 +52,18 @@ object TriggerEngine {
 
         for (compiled in rules.triggers) {
             if (longLine && compiled.pattern.isRegex) continue
-            val captures = compiled.pattern.match(line) ?: continue
+            val match = compiled.pattern.find(line) ?: continue
+            val captures = match.captures
             val t = compiled.trigger
             if (t.gag) gag = true
-            if (t.chat) chat = true
+            if (t.chat && chat == null) chat = ChatCopy(match.start, t.chatText?.let { expand(it, captures) })
             if (highlight == null) highlight = t.highlight
             if (t.vibrate) vibrate = true
             // Split before expanding so a `;` in the MUD's text can't become a second command.
             t.send?.let { send -> CommandSplitter.split(send).mapTo(commands) { expand(it, captures) } }
             if (t.notify) notifications += notifyRequest(t, captures, line, worldName)
         }
-        if (!gag && highlight == null && commands.isEmpty() && !vibrate && notifications.isEmpty() && !chat) {
+        if (!gag && highlight == null && commands.isEmpty() && !vibrate && notifications.isEmpty() && chat == null) {
             return TriggerResult.None
         }
         return TriggerResult(gag, highlight, commands, vibrate, notifications, chat)

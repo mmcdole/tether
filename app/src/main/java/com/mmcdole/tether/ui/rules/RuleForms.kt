@@ -84,6 +84,7 @@ data class TriggerForm(
     val vibrate: Boolean = false,
     val notify: Boolean = false,
     val chat: Boolean = false,
+    val chatText: String = "",
     val send: String = "",
     // Not editable yet; carried through so saving keeps the stored values.
     val group: String = "",
@@ -114,6 +115,7 @@ data class TriggerForm(
         replyTemplate = replyTemplate.trim().ifEmpty { null }?.takeIf { notify },
         replyRequiresUnlock = replyRequiresUnlock,
         chat = chat,
+        chatText = chatText.trim().ifEmpty { null }?.takeIf { chat },
     )
 
     companion object {
@@ -127,6 +129,7 @@ data class TriggerForm(
             vibrate = t.vibrate,
             notify = t.notify,
             chat = t.chat,
+            chatText = t.chatText.orEmpty(),
             send = t.send.orEmpty(),
             group = t.group.orEmpty(),
             priority = t.priority,

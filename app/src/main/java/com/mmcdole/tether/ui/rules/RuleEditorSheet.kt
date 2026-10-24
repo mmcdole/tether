@@ -103,7 +103,7 @@ private fun TriggerFields(form: TriggerForm, world: WorldOption?, viewModel: Rul
         }
         AnimatedVisibility(form.chat) {
             Text(
-                "Copies the line to the chat tray at the top. Add Gag to show it only there.",
+                "Copies the line to the chat tray at the top, from where the pattern matches. Add Gag to show it only there.",
                 fontSize = 13.sp,
                 color = TetherColors.TextDim,
             )
@@ -124,6 +124,10 @@ private fun TriggerFields(form: TriggerForm, world: WorldOption?, viewModel: Rul
                 }
             }
         }
+    }
+
+    AnimatedVisibility(form.chat) {
+        SheetField("Chat text", form.chatText, { v -> update { it.copy(chatText = v) } }, placeholder = "%1: %2 (optional)")
     }
 
     AnimatedVisibility(form.notify) {

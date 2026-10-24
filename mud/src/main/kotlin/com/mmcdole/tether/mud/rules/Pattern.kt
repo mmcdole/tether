@@ -2,6 +2,9 @@ package com.mmcdole.tether.mud.rules
 
 import java.util.regex.PatternSyntaxException
 
+/** Where a pattern matched, and its captures with the whole match as `%0`. */
+class PatternMatch(val start: Int, val captures: List<String>)
+
 sealed interface PatternResult {
     data class Valid(val pattern: Pattern) : PatternResult
 
@@ -21,12 +24,16 @@ class Pattern private constructor(
     private val wildcardGroups: IntArray?,
 ) {
     /** Returns the captures, with the whole match as `%0`, or null if the line doesn't match. */
-    fun match(text: String): List<String>? {
+    fun match(text: String): List<String>? = find(text)?.captures
+
+    /** Like [match], plus where in [text] the match starts. */
+    fun find(text: String): PatternMatch? {
         val m = regex.find(text) ?: return null
-        val groups = wildcardGroups ?: return m.groupValues
-        return List(groups.size) { n ->
+        val groups = wildcardGroups ?: return PatternMatch(m.range.first, m.groupValues)
+        val captures = List(groups.size) { n ->
             if (n == 0) m.value else if (groups[n] == 0) "" else m.groupValues[groups[n]]
         }
+        return PatternMatch(m.range.first, captures)
     }
 
     override fun toString() = source

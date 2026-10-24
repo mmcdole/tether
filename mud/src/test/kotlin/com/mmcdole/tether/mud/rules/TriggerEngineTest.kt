@@ -123,9 +123,18 @@ class TriggerEngineTest {
     }
 
     @Test
-    fun chatMarksTheLine() {
-        val result = run("[Party]: Soblak says: hi", Trigger(1, Scope.Global, "[Party]: %1", chat = true))
-        assertEquals(TriggerResult(chat = true), result)
+    fun chatCopiesFromWhereThePatternMatched() {
+        val prompt = "HP: 346 SP: 274 "
+        val result = run("$prompt[Party]: Soblak says: hi", Trigger(1, Scope.Global, "[Party]: %1", chat = true))
+        assertEquals(TriggerResult(chat = ChatCopy(prompt.length)), result)
         assertEquals(TriggerResult.None, run("Tick.", Trigger(1, Scope.Global, "[Party]: %1", chat = true)))
+    }
+
+    @Test
+    fun chatTextUsesCapturesAndTheFirstChatTriggerWins() {
+        val tell = Trigger(1, Scope.Global, "(\\w+) tells you: (.*)", isRegex = true, chat = true, chatText = "%1: %2")
+        val other = Trigger(2, Scope.Global, "tells", chat = true)
+        val result = run("HP: 346 Storgrim tells you: Certainly", tell, other)
+        assertEquals(ChatCopy(8, "Storgrim: Certainly"), result.chat)
     }
 }

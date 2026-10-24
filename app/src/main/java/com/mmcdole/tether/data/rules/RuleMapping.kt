@@ -28,6 +28,7 @@ internal fun RuleEntity.toTrigger() = Trigger(
     replyTemplate = replyTemplate,
     replyRequiresUnlock = replyRequiresUnlock,
     chat = chat,
+    chatText = chatText,
 )
 
 internal fun RuleEntity.toAlias() = Alias(
@@ -76,6 +77,7 @@ internal fun Trigger.toEntity(createdAt: Long) = RuleEntity(
     replyRequiresUnlock = replyRequiresUnlock,
     createdAt = createdAt,
     chat = chat,
+    chatText = chatText,
 )
 
 internal fun Alias.toEntity(createdAt: Long) = RuleEntity(

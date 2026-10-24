@@ -7,7 +7,7 @@ import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.execSQL
 
-@Database(entities = [WorldEntity::class, RuleEntity::class], version = 4, exportSchema = true)
+@Database(entities = [WorldEntity::class, RuleEntity::class], version = 5, exportSchema = true)
 abstract class TetherDatabase : RoomDatabase() {
     abstract fun worldDao(): WorldDao
 
@@ -17,7 +17,7 @@ abstract class TetherDatabase : RoomDatabase() {
         const val NAME = "tether.db"
 
         /** Every schema change bumps the version and adds a migration here; there is no destructive fallback. */
-        val MIGRATIONS: Array<Migration> = arrayOf(SqlMigration(1, 2, MIGRATION_1_2), SqlMigration(2, 3, MIGRATION_2_3), SqlMigration(3, 4, MIGRATION_3_4))
+        val MIGRATIONS: Array<Migration> = arrayOf(SqlMigration(1, 2, MIGRATION_1_2), SqlMigration(2, 3, MIGRATION_2_3), SqlMigration(3, 4, MIGRATION_3_4), SqlMigration(4, 5, MIGRATION_4_5))
     }
 }
 
@@ -40,6 +40,9 @@ internal val MIGRATION_2_3 = listOf(
 
 /** Adds the trigger action that copies a line to the chat tray. */
 internal val MIGRATION_3_4 = listOf("ALTER TABLE `rules` ADD COLUMN `chat` INTEGER NOT NULL DEFAULT 0")
+
+/** Adds a Chat trigger's optional text for the tray. */
+internal val MIGRATION_4_5 = listOf("ALTER TABLE `rules` ADD COLUMN `chatText` TEXT")
 
 /** A migration that is only SQL statements, kept as a list so a JVM test can check them against the exported schemas. */
 internal class SqlMigration(start: Int, end: Int, val statements: List<String>) : Migration(start, end) {

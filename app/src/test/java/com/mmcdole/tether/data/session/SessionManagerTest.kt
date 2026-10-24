@@ -365,6 +365,18 @@ class SessionManagerTest {
     }
 
     @Test
+    fun chatLeavesOutAPromptInFrontOfTheMatch() = runBlocking<Unit> {
+        rules.save(Trigger(0, thisWorld, "[Party]: %1", chat = true))
+        rules.save(Trigger(0, thisWorld, "(\\w+) tells you: (.*)", isRegex = true, chat = true, chatText = "%1: %2"))
+        val manager = manager().connected()
+        server.send("HP: 346 \u001b[35m[Party]: Spamalot says: hi\u001b[0m\r\nHP: 346 Storgrim tells you: Certainly\r\n")
+        val chat = withTimeout(2_000) { manager.chat.first { it.size == 2 } }
+        assertEquals(listOf("[Party]: Spamalot says: hi", "Storgrim: Certainly"), chat.map { it.line.text })
+        // The color moved along with the text.
+        assertEquals(listOf(0 to 26), chat[0].line.spans.map { it.start to it.end })
+    }
+
+    @Test
     fun gagDropsTheLine() = runBlocking<Unit> {
         rules.save(Trigger(0, thisWorld, "The fountain gurgles.", gag = true))
         val manager = manager().connected()

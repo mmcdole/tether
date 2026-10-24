@@ -401,8 +401,9 @@ class SessionManager @Inject constructor(
                 lines.add(line.content, if (line.prompt) LineKind.Prompt else LineKind.Output, highlight = result.highlight)
             }
             if (result.isEmpty) continue
-            if (result.chat) {
-                val chatLine = StyledLine(nextChatId++, line.content.text, line.content.spans, highlight = result.highlight)
+            result.chat?.let { copy ->
+                val content = copy.text?.let { LineContent(it, emptyList()) } ?: line.content.from(copy.start)
+                val chatLine = StyledLine(nextChatId++, content.text, content.spans, highlight = result.highlight)
                 _chat.value = (_chat.value + ChatLine(chatLine, clock.instant())).takeLast(CHAT_SIZE)
             }
             if (result.vibrate) alerts.vibrate()
@@ -622,6 +623,13 @@ class SessionManager @Inject constructor(
         val LOG_FLUSH_INTERVAL = 5.seconds
         const val ALL_WORLDS = " (all worlds)"
     }
+}
+
+/** The text from [start] on, with its styles moved along. */
+private fun LineContent.from(start: Int): LineContent {
+    if (start <= 0) return this
+    val spans = spans.filter { it.end > start }.map { it.copy(start = maxOf(it.start, start) - start, end = it.end - start) }
+    return LineContent(text.substring(start), spans)
 }
 
 /** A line a Chat trigger copied to the chat tray, and when it came in. */
