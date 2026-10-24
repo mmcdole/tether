@@ -47,6 +47,7 @@ fun Trigger.summary(): String {
         command,
         "vibrate".takeIf { vibrate },
         "notify".takeIf { notify },
+        "chat".takeIf { chat },
     )
     val text = parts.joinToString(" · ")
     // The command is shown as typed; only the app's own words get capitalized.
@@ -82,6 +83,7 @@ data class TriggerForm(
     val gag: Boolean = false,
     val vibrate: Boolean = false,
     val notify: Boolean = false,
+    val chat: Boolean = false,
     val send: String = "",
     // Not editable yet; carried through so saving keeps the stored values.
     val group: String = "",
@@ -93,7 +95,7 @@ data class TriggerForm(
 ) {
     val isNew get() = id == 0L
     val patternError get() = patternError(pattern, isRegex)
-    private val doesSomething get() = highlight != null || gag || vibrate || notify || send.isNotBlank()
+    private val doesSomething get() = highlight != null || gag || vibrate || notify || chat || send.isNotBlank()
     val canSave get() = pattern.isNotEmpty() && patternError == null && doesSomething
 
     fun toTrigger() = Trigger(
@@ -111,6 +113,7 @@ data class TriggerForm(
         notify = notify,
         replyTemplate = replyTemplate.trim().ifEmpty { null }?.takeIf { notify },
         replyRequiresUnlock = replyRequiresUnlock,
+        chat = chat,
     )
 
     companion object {
@@ -123,6 +126,7 @@ data class TriggerForm(
             gag = t.gag,
             vibrate = t.vibrate,
             notify = t.notify,
+            chat = t.chat,
             send = t.send.orEmpty(),
             group = t.group.orEmpty(),
             priority = t.priority,

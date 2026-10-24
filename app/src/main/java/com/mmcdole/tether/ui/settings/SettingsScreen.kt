@@ -112,6 +112,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = hiltViewMo
             Section("Display")
             TextSize(settings.textSize, viewModel::setTextSize)
             SwitchRow("Hide status bar", settings.hideStatusBar, viewModel::setHideStatusBar)
+            SwitchRow("Chat tray", settings.chatTray, viewModel::setChatTray)
 
             Section("Keyboard")
             SwitchRow("Autocorrect", settings.autocorrect, viewModel::setAutocorrect)

@@ -345,6 +345,26 @@ class SessionManagerTest {
     private fun List<StyledLine>.systemTexts() = filter { it.kind == LineKind.System }.map { it.text }
 
     @Test
+    fun chatTriggersCopyLinesToTheTrayAndGagKeepsThemOnlyThere() = runBlocking<Unit> {
+        rules.save(Trigger(0, thisWorld, "[Party]: %1", chat = true))
+        rules.save(Trigger(0, thisWorld, "%1 tells you: %2", chat = true, gag = true))
+        val manager = manager().connected()
+        server.send("[Party]: Soblak says: hi\r\nTick.\r\nIsi tells you: atol?\r\n")
+        manager.awaitTexts("[Party]: Soblak says: hi", "Tick.")
+        val chat = withTimeout(2_000) { manager.chat.first { it.size == 2 } }
+        assertEquals(listOf("[Party]: Soblak says: hi", "Isi tells you: atol?"), chat.map { it.line.text })
+
+        // Kept across a reconnect to the same world, cleared for another.
+        manager.disconnect()
+        manager.awaitState { it == SessionState.Idle }
+        manager.connected()
+        assertEquals(2, manager.chat.value.size)
+        manager.connect(plainWorld.copy(id = 2, name = "Other"))
+        manager.awaitState { it is SessionState.Connected && it.activeWorld?.id == 2L }
+        assertEquals(emptyList<ChatLine>(), manager.chat.value)
+    }
+
+    @Test
     fun gagDropsTheLine() = runBlocking<Unit> {
         rules.save(Trigger(0, thisWorld, "The fountain gurgles.", gag = true))
         val manager = manager().connected()

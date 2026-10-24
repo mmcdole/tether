@@ -194,7 +194,7 @@ class RuleRepository @Inject constructor(
     }
 }
 
-private fun RuleEntity.doesAnything() = body != null || gag || highlight != null || vibrate || notify
+private fun RuleEntity.doesAnything() = body != null || gag || highlight != null || vibrate || notify || chat
 
 private fun List<RuleEntity>.triggers() = filter { it.kind == RuleKind.Trigger }.map { it.toTrigger() }
 

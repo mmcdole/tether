@@ -6,6 +6,7 @@ import com.mmcdole.tether.data.session.Scrollback
 data class AppSettings(
     val textSize: Int = DEFAULT_TEXT_SIZE,
     val hideStatusBar: Boolean = false,
+    val chatTray: Boolean = true,
     val autocorrect: Boolean = false,
     val keepKeyboardOpen: Boolean = true,
     val autoReconnect: Boolean = true,

@@ -46,6 +46,8 @@ class SettingsViewModel @Inject constructor(
 
     fun setHideStatusBar(on: Boolean) = save { settings.setHideStatusBar(on) }
 
+    fun setChatTray(on: Boolean) = save { settings.setChatTray(on) }
+
     fun setAutocorrect(on: Boolean) = save { settings.setAutocorrect(on) }
 
     fun setKeepKeyboardOpen(on: Boolean) = save { settings.setKeepKeyboardOpen(on) }

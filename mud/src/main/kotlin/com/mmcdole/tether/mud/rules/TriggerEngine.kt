@@ -20,6 +20,8 @@ data class TriggerResult(
     val commands: List<String> = emptyList(),
     val vibrate: Boolean = false,
     val notifications: List<NotifyRequest> = emptyList(),
+    /** Copy the line to the chat tray. */
+    val chat: Boolean = false,
 ) {
     val isEmpty: Boolean get() = this == None
 
@@ -38,6 +40,7 @@ object TriggerEngine {
      */
     fun run(rules: RuleSet, line: String, worldName: String): TriggerResult {
         var gag = false
+        var chat = false
         var highlight: Int? = null
         var vibrate = false
         val commands = ArrayList<String>()
@@ -49,16 +52,17 @@ object TriggerEngine {
             val captures = compiled.pattern.match(line) ?: continue
             val t = compiled.trigger
             if (t.gag) gag = true
+            if (t.chat) chat = true
             if (highlight == null) highlight = t.highlight
             if (t.vibrate) vibrate = true
             // Split before expanding so a `;` in the MUD's text can't become a second command.
             t.send?.let { send -> CommandSplitter.split(send).mapTo(commands) { expand(it, captures) } }
             if (t.notify) notifications += notifyRequest(t, captures, line, worldName)
         }
-        if (!gag && highlight == null && commands.isEmpty() && !vibrate && notifications.isEmpty()) {
+        if (!gag && highlight == null && commands.isEmpty() && !vibrate && notifications.isEmpty() && !chat) {
             return TriggerResult.None
         }
-        return TriggerResult(gag, highlight, commands, vibrate, notifications)
+        return TriggerResult(gag, highlight, commands, vibrate, notifications, chat)
     }
 
     private fun notifyRequest(t: Trigger, captures: List<String>, line: String, worldName: String): NotifyRequest {

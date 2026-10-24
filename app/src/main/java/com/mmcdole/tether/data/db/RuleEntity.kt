@@ -38,4 +38,6 @@ data class RuleEntity(
     val createdAt: Long,
     /** How often a timer fires. Last, where the migration that added it put it. */
     @ColumnInfo(defaultValue = "0") val intervalMillis: Long = 0,
+    /** A trigger copies the line to the chat tray. */
+    @ColumnInfo(defaultValue = "0") val chat: Boolean = false,
 )

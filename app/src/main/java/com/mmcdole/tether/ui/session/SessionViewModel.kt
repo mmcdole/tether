@@ -60,6 +60,12 @@ class SessionViewModel @Inject constructor(
         .map { snapshot -> renderLines(snapshot.lines, rendered).also { rendered = it } }
         .flowOn(default)
 
+    /** The chat tray's lines, styled. */
+    val chat: StateFlow<List<ChatMessage>> = session.chat
+        .map { lines -> lines.map { ChatMessage(it.line.id, it.line.toAnnotatedString(), it.time) } }
+        .flowOn(default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     val state: StateFlow<SessionUiState> = combine(
         session.state,
         session.world,

@@ -99,6 +99,14 @@ private fun TriggerFields(form: TriggerForm, world: WorldOption?, viewModel: Rul
             RuleChip("Gag", form.gag, { update { it.copy(gag = !it.gag) } })
             RuleChip("Vibrate", form.vibrate, { update { it.copy(vibrate = !it.vibrate) } })
             RuleChip("Notify", form.notify, { update { it.copy(notify = !it.notify) } })
+            RuleChip("Chat", form.chat, { update { it.copy(chat = !it.chat) } })
+        }
+        AnimatedVisibility(form.chat) {
+            Text(
+                "Copies the line to the chat tray at the top. Add Gag to show it only there.",
+                fontSize = 13.sp,
+                color = TetherColors.TextDim,
+            )
         }
         AnimatedVisibility(form.highlight != null) {
             Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {

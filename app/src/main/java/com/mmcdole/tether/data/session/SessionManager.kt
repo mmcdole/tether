@@ -19,6 +19,7 @@ import com.mmcdole.tether.mud.rules.Trigger
 import com.mmcdole.tether.mud.rules.TriggerEngine
 import com.mmcdole.tether.mud.text.LineContent
 import com.mmcdole.tether.mud.text.LineKind
+import com.mmcdole.tether.mud.text.StyledLine
 import java.io.File
 import java.io.IOException
 import java.net.ConnectException
@@ -26,6 +27,7 @@ import java.net.NoRouteToHostException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.time.Clock
+import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 import javax.net.ssl.SSLException
@@ -94,6 +96,12 @@ class SessionManager @Inject constructor(
     /** Commands typed this session, oldest first. Passwords are never kept. */
     val history: StateFlow<List<String>> = _history.asStateFlow()
 
+    private val _chat = MutableStateFlow<List<ChatLine>>(emptyList())
+
+    /** Lines Chat triggers copied, oldest first. Kept across reconnects, cleared for another world. */
+    val chat: StateFlow<List<ChatLine>> = _chat.asStateFlow()
+    private var nextChatId = 1L
+
     private val _ruleSet = MutableStateFlow(RuleSet.Empty)
 
     /** The rules for [world]: its own plus the global ones. Edits show up here before the next line. */
@@ -161,6 +169,7 @@ class SessionManager @Inject constructor(
         if (newWorld) {
             lines.clear()
             _history.value = emptyList()
+            _chat.value = emptyList()
             pendingReplies.clear()
         }
         _world.value = world
@@ -392,6 +401,10 @@ class SessionManager @Inject constructor(
                 lines.add(line.content, if (line.prompt) LineKind.Prompt else LineKind.Output, highlight = result.highlight)
             }
             if (result.isEmpty) continue
+            if (result.chat) {
+                val chatLine = StyledLine(nextChatId++, line.content.text, line.content.spans, highlight = result.highlight)
+                _chat.value = (_chat.value + ChatLine(chatLine, clock.instant())).takeLast(CHAT_SIZE)
+            }
             if (result.vibrate) alerts.vibrate()
             for (request in result.notifications) alerts.notify(world, request)
             // Already split by the engine. Shown dim, like typed commands, so you can see what fired.
@@ -605,10 +618,14 @@ class SessionManager @Inject constructor(
 
     private companion object {
         const val HISTORY_SIZE = 100
+        const val CHAT_SIZE = 200
         val LOG_FLUSH_INTERVAL = 5.seconds
         const val ALL_WORLDS = " (all worlds)"
     }
 }
+
+/** A line a Chat trigger copied to the chat tray, and when it came in. */
+data class ChatLine(val line: StyledLine, val time: Instant)
 
 private val Received.hasOutput: Boolean get() = lines.isNotEmpty() || partial.text.isNotEmpty()
 
@@ -620,6 +637,7 @@ private fun Trigger.describe(): String {
         send?.takeIf { it.isNotBlank() },
         "vibrate".takeIf { vibrate },
         "notify".takeIf { notify },
+        "chat".takeIf { chat },
     )
     val regex = if (isRegex) " (regex)" else ""
     return "{$pattern}$regex = ${actions.joinToString(" · ")}"

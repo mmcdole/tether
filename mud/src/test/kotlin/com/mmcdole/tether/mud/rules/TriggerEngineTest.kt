@@ -121,4 +121,11 @@ class TriggerEngineTest {
         assertNull(result.highlight)
         assertTrue(result.isEmpty)
     }
+
+    @Test
+    fun chatMarksTheLine() {
+        val result = run("[Party]: Soblak says: hi", Trigger(1, Scope.Global, "[Party]: %1", chat = true))
+        assertEquals(TriggerResult(chat = true), result)
+        assertEquals(TriggerResult.None, run("Tick.", Trigger(1, Scope.Global, "[Party]: %1", chat = true)))
+    }
 }

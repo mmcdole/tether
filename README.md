@@ -6,6 +6,7 @@ A MUD client for Android.
 - Full ANSI color, black background
 - One-line input that leaves your keyboard alone
 - Triggers, aliases, gags and timers, global or per world
+- Chat tray: triggers can copy tells and party lines to a strip at the top you can pull down
 - Notify and reply to tells from the lock screen
 
 ## Install

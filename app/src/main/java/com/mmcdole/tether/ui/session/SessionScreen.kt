@@ -74,6 +74,7 @@ fun SessionScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val hasLog by viewModel.hasLog.collectAsStateWithLifecycle()
+    val chat by viewModel.chat.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val shareLog = {
@@ -115,14 +116,22 @@ fun SessionScreen(
         if (current == null) {
             Spacer(Modifier.weight(1f))
         } else {
-            OutputPane(
-                lines = state.lines,
-                textSize = current.textSize,
-                onTextSize = viewModel::pinchTextSize,
-                onTextSizeEnd = viewModel::endPinch,
-                onWindowSize = viewModel::setWindowSize,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-            )
+            val output = @Composable { modifier: Modifier ->
+                OutputPane(
+                    lines = state.lines,
+                    textSize = current.textSize,
+                    onTextSize = viewModel::pinchTextSize,
+                    onTextSizeEnd = viewModel::endPinch,
+                    onWindowSize = viewModel::setWindowSize,
+                    modifier = modifier.fillMaxWidth(),
+                )
+            }
+            // Hidden until a Chat trigger first fires.
+            if (current.chatTray && chat.isNotEmpty()) {
+                ChatTray(chat, current.textSize, output, Modifier.weight(1f).fillMaxWidth())
+            } else {
+                output(Modifier.weight(1f))
+            }
         }
         if (state.status == ConnectionStatus.Idle) {
             Disconnected(onReconnect = viewModel::reconnect.takeIf { state.canReconnect })

@@ -37,6 +37,7 @@ class SettingsRepositoryTest {
         assertEquals(false, settings.hideStatusBar)
         assertEquals(false, settings.autocorrect)
         assertEquals(true, settings.keepKeyboardOpen)
+        assertEquals(true, settings.chatTray)
         assertEquals(true, settings.autoReconnect)
         assertEquals(true, settings.wifiLock)
         assertEquals(true, settings.cpuWakeLock)
@@ -47,6 +48,7 @@ class SettingsRepositoryTest {
     fun everySettingIsStored() = runBlocking<Unit> {
         repository.setTextSize(17)
         repository.setHideStatusBar(true)
+        repository.setChatTray(false)
         repository.setAutocorrect(true)
         repository.setKeepKeyboardOpen(false)
         repository.setAutoReconnect(false)
@@ -56,6 +58,7 @@ class SettingsRepositoryTest {
         val expected = AppSettings(
             textSize = 17,
             hideStatusBar = true,
+            chatTray = false,
             autocorrect = true,
             keepKeyboardOpen = false,
             autoReconnect = false,

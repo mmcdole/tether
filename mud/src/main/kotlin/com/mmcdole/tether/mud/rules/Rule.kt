@@ -27,6 +27,8 @@ data class Trigger(
     /** Put in front of a notification reply, like `tell %1`. */
     val replyTemplate: String? = null,
     val replyRequiresUnlock: Boolean = true,
+    /** Copy the line to the chat tray. */
+    val chat: Boolean = false,
 )
 
 /** Hides lines that match [pattern]. */

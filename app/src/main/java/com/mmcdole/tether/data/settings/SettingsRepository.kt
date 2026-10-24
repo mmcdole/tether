@@ -31,6 +31,8 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
 
     suspend fun setHideStatusBar(on: Boolean) = store.edit { it[HIDE_STATUS_BAR] = on }
 
+    suspend fun setChatTray(on: Boolean) = store.edit { it[CHAT_TRAY] = on }
+
     suspend fun setAutocorrect(on: Boolean) = store.edit { it[AUTOCORRECT] = on }
 
     suspend fun setKeepKeyboardOpen(on: Boolean) = store.edit { it[KEEP_KEYBOARD_OPEN] = on }
@@ -53,6 +55,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
         return AppSettings(
             textSize = this[TEXT_SIZE]?.coerceIn(MIN_TEXT_SIZE, MAX_TEXT_SIZE) ?: defaults.textSize,
             hideStatusBar = this[HIDE_STATUS_BAR] ?: defaults.hideStatusBar,
+            chatTray = this[CHAT_TRAY] ?: defaults.chatTray,
             autocorrect = this[AUTOCORRECT] ?: defaults.autocorrect,
             keepKeyboardOpen = this[KEEP_KEYBOARD_OPEN] ?: defaults.keepKeyboardOpen,
             autoReconnect = this[AUTO_RECONNECT] ?: defaults.autoReconnect,
@@ -68,6 +71,7 @@ class SettingsRepository @Inject constructor(private val store: DataStore<Prefer
         val ASKED_BATTERY = booleanPreferencesKey("asked_battery")
         val TEXT_SIZE = intPreferencesKey("text_size")
         val HIDE_STATUS_BAR = booleanPreferencesKey("hide_status_bar")
+        val CHAT_TRAY = booleanPreferencesKey("chat_tray")
         val AUTOCORRECT = booleanPreferencesKey("autocorrect")
         val KEEP_KEYBOARD_OPEN = booleanPreferencesKey("keep_keyboard_open")
         val AUTO_RECONNECT = booleanPreferencesKey("auto_reconnect")
