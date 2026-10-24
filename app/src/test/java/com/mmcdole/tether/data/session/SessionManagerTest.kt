@@ -430,6 +430,36 @@ class SessionManagerTest {
     }
 
     @Test
+    fun speedwalkSendsEachStepAndEchoesWhatWasTyped() = runBlocking<Unit> {
+        val manager = manager().connected()
+        manager.send("2en")
+        assertEquals(listOf("e", "e", "n"), List(3) { server.awaitLine() })
+        manager.awaitTexts("2en")
+    }
+
+    @Test
+    fun tickerSendsUntilRemovedAndStopsWithTheSession() = runBlocking<Unit> {
+        val manager = manager().connected()
+        manager.send("#ticker heal {cast heal;grin} 0.5")
+        assertEquals(listOf("cast heal", "grin", "cast heal", "grin"), List(4) { server.awaitLine() })
+        manager.send("#ticker")
+        manager.send("#unticker heal")
+        withTimeout(2_000) {
+            manager.scrollback.first {
+                it.lines.systemTexts() == listOf("#ticker heal = cast heal;grin every 0.5s", "#ticker heal = cast heal;grin every 0.5s", "Removed ticker heal")
+            }
+        }
+        while (!server.noMoreLines()) Unit
+
+        manager.send("#ticker tk save 0.5")
+        assertEquals("save", server.awaitLine())
+        manager.disconnect()
+        manager.awaitState { it == SessionState.Idle }
+        manager.send("#ticker")
+        withTimeout(2_000) { manager.scrollback.first { it.lines.systemTexts().last() == "No tickers" } }
+    }
+
+    @Test
     fun hashCommandsWorkWhileDisconnected() = runBlocking<Unit> {
         val manager = manager().connected()
         manager.disconnect()

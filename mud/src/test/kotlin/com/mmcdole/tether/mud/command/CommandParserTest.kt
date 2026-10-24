@@ -153,4 +153,26 @@ class CommandParserTest {
     fun parseCommandDoesNotSplit() {
         assertEquals(listOf(Step.Send("say hi;drop all")), CommandParser.parseCommand("say hi;drop all"))
     }
+
+    @Test
+    fun speedwalksExpandAfterAliases() {
+        assertEquals(List(3) { Step.Send("e") } + Step.Send("n"), parse("3en"))
+        assertEquals(List(4) { Step.Send("w") }, parse("home", "home" to "4w"))
+        assertEquals(listOf(Step.Send("news")), parse("news"))
+    }
+
+    @Test
+    fun tickerTakesNameCommandAndSeconds() {
+        assertEquals(Step.AddTicker("heal", "cast heal;grin", 1000), one("#ticker heal {cast heal;grin} 1"))
+        assertEquals(Step.AddTicker("tk", "save", 2500), one("#ticker {tk} {save} {2.5}"))
+        assertEquals(Step.ListTickers, one("#ticker"))
+        assertEquals(Step.RemoveTicker("heal"), one("#unticker heal"))
+    }
+
+    @Test
+    fun tickerNeedsAtLeastHalfASecond() {
+        assertIs<Step.Error>(one("#ticker heal {cast heal} 0.1"))
+        assertIs<Step.Error>(one("#ticker heal {cast heal} soon"))
+        assertIs<Step.Error>(one("#ticker heal {cast heal}"))
+    }
 }

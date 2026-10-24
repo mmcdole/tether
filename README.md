@@ -25,8 +25,10 @@ Type these in the input line:
 #alias {k} {kill %1}        alias for this world (#galias for all worlds)
 #action {%1 tells you: %2} {say hi %1}
 #gag {The fountain gurgles.}
+#ticker {heal} {cast heal} {1}   sends every second until #unticker heal
 #unalias k   #unaction {...}   #ungag {...}
 look;say hi                 ; separates commands
+10e   3n2w   eeee           speedwalk
 ```
 
 Long-press output to select and copy. Pinch to change text size.

@@ -108,6 +108,9 @@ class SessionManager @Inject constructor(
     // Notification replies waiting for the connection to come back and log in.
     private val pendingReplies = ArrayList<String>()
 
+    // `#ticker`s by name. They last until the session ends, across reconnects.
+    private val tickers = LinkedHashMap<String, Ticker>()
+
     // False from connecting until auto-login is through; replies wait until then.
     private var loggedIn = false
     private var columns = 80
@@ -156,6 +159,7 @@ class SessionManager @Inject constructor(
             lines.clear()
             _history.value = emptyList()
             pendingReplies.clear()
+            stopTickers()
         }
         _world.value = world
         log.close()
@@ -472,6 +476,17 @@ class SessionManager @Inject constructor(
                     .map { (trigger, global) -> trigger.describe() + allWorlds(global) }
                     .ifEmpty { listOf("No triggers") }
             }
+            is Step.AddTicker -> {
+                startTicker(step, world)
+                listOf("#ticker ${step.name} = ${step.command} every ${seconds(step.intervalMillis)}")
+            }
+            is Step.RemoveTicker -> {
+                val ticker = tickers.remove(step.name)
+                ticker?.job?.cancel()
+                listOf(if (ticker != null) "Removed ticker ${step.name}" else "No ticker ${step.name}")
+            }
+            Step.ListTickers -> tickers.map { (name, t) -> "#ticker $name = ${t.command} every ${seconds(t.intervalMillis)}" }
+                .ifEmpty { listOf("No tickers") }
             is Step.Error -> listOf(step.message)
             is Step.Send -> emptyList()
         }
@@ -482,6 +497,29 @@ class SessionManager @Inject constructor(
             _ruleSet.value = rules.observeRuleSet(world.id).first()
         }
         return lines
+    }
+
+    /** Starts [step]'s ticker, replacing one with the same name. It skips beats while disconnected. */
+    private fun startTicker(step: Step.AddTicker, world: World) {
+        tickers.remove(step.name)?.job?.cancel()
+        val job = scope.launch(session) {
+            while (true) {
+                delay(step.intervalMillis)
+                commands.withLock {
+                    val conn = connection ?: return@withLock
+                    if (conn.serverEcho) return@withLock
+                    lines.add(LineContent(step.command, emptyList()), LineKind.Echo)
+                    perform(CommandParser.parse(step.command, _ruleSet.value.aliases), conn, world)
+                    publish()
+                }
+            }
+        }
+        tickers[step.name] = Ticker(step.command, step.intervalMillis, job)
+    }
+
+    private fun stopTickers() {
+        for (ticker in tickers.values) ticker.job.cancel()
+        tickers.clear()
     }
 
     /** Shows a sent command after the prompt it answers, or on its own line. */
@@ -520,6 +558,7 @@ class SessionManager @Inject constructor(
     private fun ended(message: String) {
         lines.add(LineContent(message, emptyList()), LineKind.System)
         dropPendingReplies()
+        stopTickers()
         log.close()
         _state.value = SessionState.Idle
         publish()
@@ -528,6 +567,8 @@ class SessionManager @Inject constructor(
     private fun publish() {
         _scrollback.value = lines.snapshot(partial)
     }
+
+    private class Ticker(val command: String, val intervalMillis: Long, val job: Job)
 
     private class Login(val world: World) {
         enum class Step { Username, Password, Done }
@@ -545,6 +586,9 @@ class SessionManager @Inject constructor(
         const val ALL_WORLDS = " (all worlds)"
     }
 }
+
+/** An interval as `1s` or `2.5s`. */
+private fun seconds(millis: Long): String = if (millis % 1000 == 0L) "${millis / 1000}s" else "${millis / 1000.0}s"
 
 private val Received.hasOutput: Boolean get() = lines.isNotEmpty() || partial.text.isNotEmpty()
 

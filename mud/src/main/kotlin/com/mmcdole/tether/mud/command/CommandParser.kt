@@ -25,19 +25,29 @@ sealed interface Step {
     /** Remove the world gag with this pattern if there is one, otherwise the global one. */
     data class RemoveGag(val pattern: String) : Step
 
+    /** Sends [command] every [intervalMillis] while connected. Replaces a ticker with the same name. */
+    data class AddTicker(val name: String, val command: String, val intervalMillis: Long) : Step
+
+    data class RemoveTicker(val name: String) : Step
+
     data object ListAliases : Step
 
     data object ListTriggers : Step
+
+    data object ListTickers : Step
 
     data class Error(val message: String) : Step
 }
 
 /**
  * Turns a line of input into [Step]s. Splits on `;` (not inside braces, and not `\;`), expands
- * aliases, and parses `#` commands. Arguments to `#` commands go in braces, which may nest; braces are
- * optional for one word, and an unbraced last argument takes the rest of the line.
+ * aliases and speedwalks, and parses `#` commands. Arguments to `#` commands go in braces, which may
+ * nest; braces are optional for one word, and an unbraced last argument takes the rest of the line.
  */
 object CommandParser {
+    /** The shortest ticker interval, so a typo can't flood the MUD. */
+    const val MIN_TICKER_SECONDS = 0.5
+
     fun parse(input: String, aliases: Map<String, Alias> = emptyMap()): List<Step> =
         CommandSplitter.split(input).flatMap { parseCommand(it, aliases) }
 
@@ -46,7 +56,12 @@ object CommandParser {
         if (isLocal(command)) return listOf(local(command.trimStart()))
         return when (val result = AliasExpander.expand(command, aliases)) {
             is AliasResult.Error -> listOf(Step.Error(result.message))
-            is AliasResult.Commands -> result.commands.map { if (isLocal(it)) local(it.trimStart()) else Step.Send(it) }
+            is AliasResult.Commands -> result.commands.flatMap {
+                when {
+                    isLocal(it) -> listOf(local(it.trimStart()))
+                    else -> Speedwalk.expand(it)?.map(Step::Send) ?: listOf(Step.Send(it))
+                }
+            }
         }
     }
 
@@ -73,6 +88,17 @@ object CommandParser {
                 }
             }
             "gag", "ggag" -> one(rest, usage("{pattern}")) { Step.AddGag(it, global = lower == "ggag") }
+            "ticker" -> args(rest, 3) { a ->
+                val seconds = a.getOrNull(2)?.toDoubleOrNull()
+                when {
+                    a.isEmpty() -> Step.ListTickers
+                    a.size < 3 || a[0].isEmpty() || a[1].isEmpty() -> usage("{name} {command} {seconds}")
+                    seconds == null || seconds < MIN_TICKER_SECONDS ->
+                        Step.Error("Ticker seconds must be a number, at least $MIN_TICKER_SECONDS: ${a[2]}")
+                    else -> Step.AddTicker(a[0], a[1], (seconds * 1000).toLong())
+                }
+            }
+            "unticker" -> one(rest, usage("{name}")) { Step.RemoveTicker(it) }
             "unalias" -> one(rest, usage("{name}")) { Step.RemoveAlias(it) }
             "unaction" -> one(rest, usage("{pattern}")) { Step.RemoveAction(it) }
             "ungag" -> one(rest, usage("{pattern}")) { Step.RemoveGag(it) }
