@@ -5,7 +5,7 @@ A MUD client for Android.
 - Stays connected with the screen off
 - Full ANSI color, black background
 - One-line input that leaves your keyboard alone
-- Aliases, triggers and gags, global or per world
+- Triggers, aliases, gags and timers, global or per world
 - Notify and reply to tells from the lock screen
 
 ## Install
@@ -25,8 +25,10 @@ Type these in the input line:
 #alias {k} {kill %1}        alias for this world (#galias for all worlds)
 #action {%1 tells you: %2} {say hi %1}
 #gag {The fountain gurgles.}
-#ticker {heal} {cast heal} {1}   sends every second until #unticker heal
+#ticker {heal} {cast heal} {1}   timer: sends every second while on
+#ticker heal off   #ticker heal on   #unticker heal (same as off)
 #unalias k   #unaction {...}   #ungag {...}
+#alias   #action   #gag   #ticker   lists them
 look;say hi                 ; separates commands
 10e   3n2w   eeee           speedwalk
 ```

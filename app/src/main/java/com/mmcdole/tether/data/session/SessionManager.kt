@@ -13,6 +13,8 @@ import com.mmcdole.tether.mud.command.CommandSplitter
 import com.mmcdole.tether.mud.command.Step
 import com.mmcdole.tether.mud.rules.RuleSet
 import com.mmcdole.tether.mud.rules.Scope
+import com.mmcdole.tether.mud.rules.Timer
+import com.mmcdole.tether.mud.rules.secondsText
 import com.mmcdole.tether.mud.rules.Trigger
 import com.mmcdole.tether.mud.rules.TriggerEngine
 import com.mmcdole.tether.mud.text.LineContent
@@ -108,8 +110,8 @@ class SessionManager @Inject constructor(
     // Notification replies waiting for the connection to come back and log in.
     private val pendingReplies = ArrayList<String>()
 
-    // `#ticker`s by name. They last until the session ends, across reconnects.
-    private val tickers = LinkedHashMap<String, Ticker>()
+    // The timers firing now, by rule id. Only while connected.
+    private val runningTimers = HashMap<Long, RunningTimer>()
 
     // False from connecting until auto-login is through; replies wait until then.
     private var loggedIn = false
@@ -128,6 +130,7 @@ class SessionManager @Inject constructor(
                 .flatMapLatest { id -> if (id == null) flowOf(RuleSet.Empty) else rules.observeRuleSet(id) }
                 .collect { _ruleSet.value = it }
         }
+        scope.launch(session) { _ruleSet.collect { syncTimers() } }
         scope.launch(session) {
             options.options.map { it.scrollbackLines }.distinctUntilChanged().collect {
                 lines.capacity = it
@@ -159,7 +162,6 @@ class SessionManager @Inject constructor(
             lines.clear()
             _history.value = emptyList()
             pendingReplies.clear()
-            stopTickers()
         }
         _world.value = world
         log.close()
@@ -335,6 +337,7 @@ class SessionManager @Inject constructor(
             publish()
         }
         _state.value = SessionState.Connected(world, clock.instant())
+        syncTimers()
         scope.launch { worlds.markConnected(world.id) }
         // Without auto-login a fresh connection sits at the login prompt, where a queued tell
         // would be taken as a name. Replies only wait for worlds that log in by themselves.
@@ -477,49 +480,69 @@ class SessionManager @Inject constructor(
                     .ifEmpty { listOf("No triggers") }
             }
             is Step.AddTicker -> {
-                startTicker(step, world)
-                listOf("#ticker ${step.name} = ${step.command} every ${seconds(step.intervalMillis)}")
+                rules.addTimer(scope(step.global), step.name, step.command, step.intervalMillis)
+                listOf("#ticker ${step.name} = ${step.command} every ${secondsText(step.intervalMillis)}" + allWorlds(step.global))
             }
-            is Step.RemoveTicker -> {
-                val ticker = tickers.remove(step.name)
-                ticker?.job?.cancel()
-                listOf(if (ticker != null) "Removed ticker ${step.name}" else "No ticker ${step.name}")
+            is Step.SetTicker -> {
+                val onOff = if (step.on) "on" else "off"
+                when (val result = rules.setTimerEnabled(world.id, step.name, step.on)) {
+                    is Removal.Removed -> listOf("Ticker ${step.name} $onOff" + allWorlds(result.scope == Scope.Global))
+                    Removal.NotFound -> listOf("No ticker ${step.name}")
+                }
             }
-            Step.ListTickers -> tickers.map { (name, t) -> "#ticker $name = ${t.command} every ${seconds(t.intervalMillis)}" }
-                .ifEmpty { listOf("No tickers") }
+            Step.ListGags -> {
+                val lists = rules.observeRules(world.id).first()
+                val all = lists.worldGags.map { it to false } + lists.globalGags.map { it to true }
+                all.filter { it.first.enabled }
+                    .map { (gag, global) -> "#gag {${gag.pattern}}" + (if (gag.isRegex) " (regex)" else "") + allWorlds(global) }
+                    .ifEmpty { listOf("No gags") }
+            }
+            Step.ListTickers -> {
+                val lists = rules.observeRules(world.id).first()
+                val all = lists.worldTimers.map { it to false } + lists.globalTimers.map { it to true }
+                all.map { (timer, global) ->
+                    val off = if (timer.enabled) "" else " (off)"
+                    "#ticker ${timer.name} = ${timer.command} every ${secondsText(timer.intervalMillis)}$off" + allWorlds(global)
+                }.ifEmpty { listOf("No tickers") }
+            }
             is Step.Error -> listOf(step.message)
             is Step.Send -> emptyList()
         }
         // Read back now rather than waiting on the database flow, so the very next command or line sees it.
         if (step is Step.AddAlias || step is Step.AddAction || step is Step.AddGag ||
-            step is Step.RemoveAlias || step is Step.RemoveAction || step is Step.RemoveGag
+            step is Step.RemoveAlias || step is Step.RemoveAction || step is Step.RemoveGag ||
+            step is Step.AddTicker || step is Step.SetTicker
         ) {
             _ruleSet.value = rules.observeRuleSet(world.id).first()
         }
         return lines
     }
 
-    /** Starts [step]'s ticker, replacing one with the same name. It skips beats while disconnected. */
-    private fun startTicker(step: Step.AddTicker, world: World) {
-        tickers.remove(step.name)?.job?.cancel()
-        val job = scope.launch(session) {
-            while (true) {
-                delay(step.intervalMillis)
-                commands.withLock {
-                    val conn = connection ?: return@withLock
-                    if (conn.serverEcho) return@withLock
-                    lines.add(LineContent(step.command, emptyList()), LineKind.Echo)
-                    perform(CommandParser.parse(step.command, _ruleSet.value.aliases), conn, world)
-                    publish()
-                }
-            }
+    /** Runs the rule set's timers while connected, restarting any whose command or interval changed. */
+    private fun syncTimers() {
+        val world = _world.value.takeIf { connection != null }
+        val wanted = if (world != null) _ruleSet.value.timers.associateBy { it.id } else emptyMap()
+        runningTimers.entries.removeAll { (id, running) ->
+            (wanted[id] != running.timer).also { stale -> if (stale) running.job.cancel() }
         }
-        tickers[step.name] = Ticker(step.command, step.intervalMillis, job)
+        if (world == null) return
+        for (timer in wanted.values) {
+            if (timer.id !in runningTimers) runningTimers[timer.id] = RunningTimer(timer, startTimer(timer, world))
+        }
     }
 
-    private fun stopTickers() {
-        for (ticker in tickers.values) ticker.job.cancel()
-        tickers.clear()
+    private fun startTimer(timer: Timer, world: World) = scope.launch(session) {
+        while (true) {
+            delay(timer.intervalMillis)
+            commands.withLock {
+                val conn = connection ?: return@withLock
+                // Not at a password prompt.
+                if (conn.serverEcho) return@withLock
+                lines.add(LineContent(timer.command, emptyList()), LineKind.Echo)
+                perform(CommandParser.parse(timer.command, _ruleSet.value.aliases), conn, world)
+                publish()
+            }
+        }
     }
 
     /** Shows a sent command after the prompt it answers, or on its own line. */
@@ -548,6 +571,7 @@ class SessionManager @Inject constructor(
         connection = null
         login = null
         loggedIn = false
+        syncTimers()
         boundNetwork = null
         _serverEcho.value = false
         // Keep an unfinished prompt in the scrollback instead of losing it.
@@ -558,7 +582,6 @@ class SessionManager @Inject constructor(
     private fun ended(message: String) {
         lines.add(LineContent(message, emptyList()), LineKind.System)
         dropPendingReplies()
-        stopTickers()
         log.close()
         _state.value = SessionState.Idle
         publish()
@@ -568,7 +591,7 @@ class SessionManager @Inject constructor(
         _scrollback.value = lines.snapshot(partial)
     }
 
-    private class Ticker(val command: String, val intervalMillis: Long, val job: Job)
+    private class RunningTimer(val timer: Timer, val job: Job)
 
     private class Login(val world: World) {
         enum class Step { Username, Password, Done }
@@ -586,9 +609,6 @@ class SessionManager @Inject constructor(
         const val ALL_WORLDS = " (all worlds)"
     }
 }
-
-/** An interval as `1s` or `2.5s`. */
-private fun seconds(millis: Long): String = if (millis % 1000 == 0L) "${millis / 1000}s" else "${millis / 1000.0}s"
 
 private val Received.hasOutput: Boolean get() = lines.isNotEmpty() || partial.text.isNotEmpty()
 

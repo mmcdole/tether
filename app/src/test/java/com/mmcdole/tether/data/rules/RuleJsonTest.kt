@@ -4,6 +4,8 @@ import com.mmcdole.tether.data.db.RuleKind
 import com.mmcdole.tether.data.db.WorldEntity
 import com.mmcdole.tether.data.world.FakeWorldDao
 import com.mmcdole.tether.mud.rules.Alias
+import com.mmcdole.tether.mud.rules.Gag
+import com.mmcdole.tether.mud.rules.Timer
 import com.mmcdole.tether.mud.rules.Scope
 import com.mmcdole.tether.mud.rules.Trigger
 import java.time.Clock
@@ -39,10 +41,11 @@ class RuleJsonTest {
             val names = worlds.observeAll().first().associate { it.id to it.name }
             fun name(scope: Scope) = (scope as? Scope.World)?.let { names[it.worldId] }
             return rules.getAll().map { row ->
-                if (row.kind == RuleKind.Alias) {
-                    row.toAlias().let { name(it.scope) to it.copy(id = 0, scope = Scope.Global) }
-                } else {
-                    row.toTrigger().let { name(it.scope) to it.copy(id = 0, scope = Scope.Global) }
+                when (row.kind) {
+                    RuleKind.Alias -> row.toAlias().let { name(it.scope) to it.copy(id = 0, scope = Scope.Global) }
+                    RuleKind.Trigger -> row.toTrigger().let { name(it.scope) to it.copy(id = 0, scope = Scope.Global) }
+                    RuleKind.Gag -> row.toGag().let { name(it.scope) to it.copy(id = 0, scope = Scope.Global) }
+                    RuleKind.Timer -> row.toTimer().let { name(it.scope) to it.copy(id = 0, scope = Scope.Global) }
                 }
             }
         }
@@ -114,5 +117,25 @@ class RuleJsonTest {
         val device = Device(clock)
         assertThrows(IllegalArgumentException::class.java) { runBlocking { device.json.import("[1, 2]") } }
         assertThrows(NewerRulesFileException::class.java) { runBlocking { device.json.import("""{"version": 99}""") } }
+    }
+
+    @Test
+    fun gagsAndTimersRoundTrip() = runTest {
+        val source = Device(clock)
+        val (thorin) = source.addWorlds("Thorin")
+        source.repository.save(Gag(0, Scope.World(thorin), "spam", isRegex = true))
+        source.repository.save(Timer(0, Scope.Global, "heal", "cast heal", 1500, enabled = false))
+        val target = Device(clock)
+        target.addWorlds("Thorin")
+        assertEquals(ImportSummary(2, 0, 0, emptyList()), target.json.import(source.json.export()))
+        assertEquals(source.snapshot(), target.snapshot())
+    }
+
+    @Test
+    fun version1GagOnlyTriggersComeInAsGags() = runTest {
+        val device = Device(clock)
+        val file = """{"triggers": [{"world": null, "pattern": "spam", "gag": true}, {"world": null, "pattern": "x", "gag": true, "notify": true}]}"""
+        device.json.import(file)
+        assertEquals(listOf(RuleKind.Gag, RuleKind.Trigger), device.rules.getAll().map { it.kind })
     }
 }

@@ -10,6 +10,7 @@ import com.mmcdole.tether.data.world.WorldRepository
 import com.mmcdole.tether.data.world.testSecrets
 import com.mmcdole.tether.mud.rules.Alias
 import com.mmcdole.tether.mud.rules.Scope
+import com.mmcdole.tether.mud.rules.Timer
 import com.mmcdole.tether.mud.rules.Trigger
 import com.mmcdole.tether.mud.text.LineKind
 import com.mmcdole.tether.mud.text.StyledLine
@@ -411,6 +412,7 @@ class SessionManagerTest {
         manager.send("#ggag spam")
         manager.send("#alias")
         manager.send("#action")
+        manager.send("#gag")
         manager.send("#alias k")
         manager.send("#bogus")
         val expected = listOf(
@@ -420,8 +422,8 @@ class SessionManagerTest {
             "#gag {spam} (all worlds)",
             "#alias l = look (all worlds)",
             "{The %1 slashes you.} = flee",
-            "{The fountain gurgles.} = gag",
-            "{spam} = gag (all worlds)",
+            "#gag {The fountain gurgles.}",
+            "#gag {spam} (all worlds)",
             "Usage: #alias {name} {expansion}",
             "Unknown command: #bogus",
         )
@@ -438,25 +440,42 @@ class SessionManagerTest {
     }
 
     @Test
-    fun tickerSendsUntilRemovedAndStopsWithTheSession() = runBlocking<Unit> {
+    fun tickerIsSavedAndSendsWhileOnAndConnected() = runBlocking<Unit> {
         val manager = manager().connected()
         manager.send("#ticker heal {cast heal;grin} 0.5")
         assertEquals(listOf("cast heal", "grin", "cast heal", "grin"), List(4) { server.awaitLine() })
-        manager.send("#ticker")
         manager.send("#unticker heal")
+        manager.send("#ticker")
         withTimeout(2_000) {
             manager.scrollback.first {
-                it.lines.systemTexts() == listOf("#ticker heal = cast heal;grin every 0.5s", "#ticker heal = cast heal;grin every 0.5s", "Removed ticker heal")
+                it.lines.systemTexts() == listOf(
+                    "#ticker heal = cast heal;grin every 0.5s",
+                    "Ticker heal off",
+                    "#ticker heal = cast heal;grin every 0.5s (off)",
+                )
             }
         }
         while (!server.noMoreLines()) Unit
 
-        manager.send("#ticker tk save 0.5")
-        assertEquals("save", server.awaitLine())
+        // Switched back on from the Rules screen.
+        val id = rules.observeRules(plainWorld.id).first().worldTimers.single().id
+        rules.setEnabled(id, true)
+        assertEquals("cast heal", server.awaitLine())
+        assertEquals("grin", server.awaitLine())
+
         manager.disconnect()
         manager.awaitState { it == SessionState.Idle }
-        manager.send("#ticker")
-        withTimeout(2_000) { manager.scrollback.first { it.lines.systemTexts().last() == "No tickers" } }
+        while (!server.noMoreLines()) Unit
+        assertTrue("still saved and on", rules.getTimer(id)!!.enabled)
+    }
+
+    @Test
+    fun savedTimerStartsOnConnect() = runBlocking<Unit> {
+        rules.save(Timer(0, thisWorld, "save", "save", 500))
+        rules.save(Timer(0, thisWorld, "off", "nope", 500, enabled = false))
+        manager().connected()
+        assertEquals("save", server.awaitLine())
+        assertEquals("save", server.awaitLine())
     }
 
     @Test

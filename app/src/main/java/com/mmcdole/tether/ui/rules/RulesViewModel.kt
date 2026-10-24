@@ -11,7 +11,9 @@ import com.mmcdole.tether.data.rules.RuleTransfer
 import com.mmcdole.tether.data.world.World
 import com.mmcdole.tether.data.world.WorldRepository
 import com.mmcdole.tether.mud.rules.Alias
+import com.mmcdole.tether.mud.rules.Gag
 import com.mmcdole.tether.mud.rules.Scope
+import com.mmcdole.tether.mud.rules.Timer
 import com.mmcdole.tether.mud.rules.Trigger
 import com.mmcdole.tether.ui.RulesRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -30,7 +32,7 @@ import kotlinx.coroutines.launch
 data class RuleRow(
     val id: Long,
     val scope: Scope,
-    /** The pattern, or the alias name. */
+    /** The pattern, or the alias or timer name. */
     val title: String,
     val summary: String,
     val enabled: Boolean,
@@ -41,6 +43,8 @@ data class WorldOption(val id: Long, val name: String)
 sealed interface RuleEditor {
     data class EditTrigger(val form: TriggerForm) : RuleEditor
     data class EditAlias(val form: AliasForm) : RuleEditor
+    data class EditGag(val form: GagForm) : RuleEditor
+    data class EditTimer(val form: TimerForm) : RuleEditor
 }
 
 enum class TransferMode { Copy, Move }
@@ -48,7 +52,7 @@ enum class TransferMode { Copy, Move }
 data class TransferState(
     val mode: TransferMode = TransferMode.Copy,
     val selected: Set<Scope> = emptySet(),
-    /** Names of destinations that already have this alias, while asking what to do. */
+    /** Names of destinations that already have this alias or timer, while asking what to do. */
     val conflicts: List<String>? = null,
     val working: Boolean = false,
 )
@@ -62,8 +66,8 @@ data class RulesUiState(
     val world: WorldOption? = null,
     val worlds: List<WorldOption> = emptyList(),
     val tab: RuleTab = RuleTab.Triggers,
-    val triggerCount: Int = 0,
-    val aliasCount: Int = 0,
+    /** Rules on each tab, for the tab labels. */
+    val counts: Map<RuleTab, Int> = emptyMap(),
     /** This tab's rows in the world box and the All worlds box. */
     val worldRows: List<RuleRow> = emptyList(),
     val globalRows: List<RuleRow> = emptyList(),
@@ -110,20 +114,15 @@ class RulesViewModel internal constructor(
         this.lists = lists
         allWorlds = worlds
         val world = worlds.firstOrNull { it.id == id }?.let { WorldOption(it.id, it.name) }
-        val triggers = overlay.tab == RuleTab.Triggers
+        val rows = RuleTab.entries.associateWith { lists.rows(it) }
         RulesUiState(
             loading = false,
             world = world,
             worlds = worlds.map { WorldOption(it.id, it.name) },
             tab = overlay.tab,
-            triggerCount = lists.globalTriggers.size + if (world != null) lists.worldTriggers.size else 0,
-            aliasCount = lists.globalAliases.size + if (world != null) lists.worldAliases.size else 0,
-            worldRows = when {
-                world == null -> emptyList()
-                triggers -> lists.worldTriggers.map { it.toRow() }
-                else -> lists.worldAliases.map { it.toRow() }
-            },
-            globalRows = if (triggers) lists.globalTriggers.map { it.toRow() } else lists.globalAliases.map { it.toRow() },
+            counts = rows.mapValues { (_, r) -> r.global.size + if (world != null) r.world.size else 0 },
+            worldRows = if (world == null) emptyList() else rows.getValue(overlay.tab).world,
+            globalRows = rows.getValue(overlay.tab).global,
             editor = overlay.editor,
             actions = overlay.actions,
             confirmDelete = overlay.confirmDelete,
@@ -147,7 +146,9 @@ class RulesViewModel internal constructor(
     fun add(scope: Scope) = overlay.update {
         val editor = when (it.tab) {
             RuleTab.Triggers -> RuleEditor.EditTrigger(TriggerForm(scope = scope))
-            RuleTab.Aliases -> RuleEditor.EditAlias(AliasForm(scope = scope, taken = takenNames(excluding = 0)))
+            RuleTab.Aliases -> RuleEditor.EditAlias(AliasForm(scope = scope, taken = takenAliasNames(excluding = 0)))
+            RuleTab.Gags -> RuleEditor.EditGag(GagForm(scope = scope))
+            RuleTab.Timers -> RuleEditor.EditTimer(TimerForm(scope = scope, taken = takenTimerNames(excluding = 0)))
         }
         it.copy(editor = editor)
     }
@@ -164,17 +165,32 @@ class RulesViewModel internal constructor(
         it.copy(editor = RuleEditor.EditAlias(change(editor.form)))
     }
 
+    fun updateGag(change: (GagForm) -> GagForm) = overlay.update {
+        val editor = it.editor as? RuleEditor.EditGag ?: return@update it
+        it.copy(editor = RuleEditor.EditGag(change(editor.form)))
+    }
+
+    fun updateTimer(change: (TimerForm) -> TimerForm) = overlay.update {
+        val editor = it.editor as? RuleEditor.EditTimer ?: return@update it
+        it.copy(editor = RuleEditor.EditTimer(change(editor.form)))
+    }
+
     fun save() {
         val editor = overlay.value.editor ?: return
-        when (editor) {
-            is RuleEditor.EditTrigger -> if (!editor.form.canSave) return
-            is RuleEditor.EditAlias -> if (!editor.form.canSave) return
+        val canSave = when (editor) {
+            is RuleEditor.EditTrigger -> editor.form.canSave
+            is RuleEditor.EditAlias -> editor.form.canSave
+            is RuleEditor.EditGag -> editor.form.canSave
+            is RuleEditor.EditTimer -> editor.form.canSave
         }
+        if (!canSave) return
         overlay.update { it.copy(editor = null) }
         viewModelScope.launch {
             when (editor) {
                 is RuleEditor.EditTrigger -> rules.save(editor.form.toTrigger())
                 is RuleEditor.EditAlias -> rules.save(editor.form.toAlias())
+                is RuleEditor.EditGag -> rules.save(editor.form.toGag())
+                is RuleEditor.EditTimer -> rules.save(editor.form.toTimer())
             }
         }
     }
@@ -197,7 +213,7 @@ class RulesViewModel internal constructor(
         else it.copy(selected = if (scope in it.selected) it.selected - scope else it.selected + scope)
     }
 
-    /** Applies the copy or move, first asking if any destination already has an alias with this name. */
+    /** Applies the copy or move, first asking if any destination already has an alias or timer with this name. */
     fun applyTransfer() {
         val actions = overlay.value.actions ?: return
         val t = actions.transfer ?: return
@@ -262,13 +278,22 @@ class RulesViewModel internal constructor(
         RuleTab.Triggers -> (lists.worldTriggers + lists.globalTriggers).firstOrNull { it.id == row.id }
             ?.let { RuleEditor.EditTrigger(TriggerForm.of(it)) }
         RuleTab.Aliases -> (lists.worldAliases + lists.globalAliases).firstOrNull { it.id == row.id }
-            ?.let { RuleEditor.EditAlias(AliasForm.of(it, takenNames(excluding = it.id))) }
+            ?.let { RuleEditor.EditAlias(AliasForm.of(it, takenAliasNames(excluding = it.id))) }
+        RuleTab.Gags -> (lists.worldGags + lists.globalGags).firstOrNull { it.id == row.id }
+            ?.let { RuleEditor.EditGag(GagForm.of(it)) }
+        RuleTab.Timers -> (lists.worldTimers + lists.globalTimers).firstOrNull { it.id == row.id }
+            ?.let { RuleEditor.EditTimer(TimerForm.of(it, takenTimerNames(excluding = it.id))) }
     }
 
-    private fun takenNames(excluding: Long): Map<Scope, Set<String>> =
-        (lists.worldAliases + lists.globalAliases)
-            .filter { it.id != excluding }
-            .groupBy({ it.scope }, { it.name })
+    private fun takenAliasNames(excluding: Long) =
+        taken((lists.worldAliases + lists.globalAliases).map { Triple(it.id, it.scope, it.name) }, excluding)
+
+    private fun takenTimerNames(excluding: Long) =
+        taken((lists.worldTimers + lists.globalTimers).map { Triple(it.id, it.scope, it.name) }, excluding)
+
+    private fun taken(rules: List<Triple<Long, Scope, String>>, excluding: Long): Map<Scope, Set<String>> =
+        rules.filter { it.first != excluding }
+            .groupBy({ it.second }, { it.third })
             .mapValues { it.value.toSet() }
 
     private fun scopeName(scope: Scope) = when (scope) {
@@ -283,3 +308,16 @@ class RulesViewModel internal constructor(
 private fun Trigger.toRow() = RuleRow(id, scope, pattern, summary(), enabled)
 
 private fun Alias.toRow() = RuleRow(id, scope, name, summary(), enabled)
+
+private fun Gag.toRow() = RuleRow(id, scope, pattern, summary(), enabled)
+
+private fun Timer.toRow() = RuleRow(id, scope, name, summary(), enabled)
+
+private class TabRows(val world: List<RuleRow>, val global: List<RuleRow>)
+
+private fun RuleLists.rows(tab: RuleTab) = when (tab) {
+    RuleTab.Triggers -> TabRows(worldTriggers.map { it.toRow() }, globalTriggers.map { it.toRow() })
+    RuleTab.Aliases -> TabRows(worldAliases.map { it.toRow() }, globalAliases.map { it.toRow() })
+    RuleTab.Gags -> TabRows(worldGags.map { it.toRow() }, globalGags.map { it.toRow() })
+    RuleTab.Timers -> TabRows(worldTimers.map { it.toRow() }, globalTimers.map { it.toRow() })
+}

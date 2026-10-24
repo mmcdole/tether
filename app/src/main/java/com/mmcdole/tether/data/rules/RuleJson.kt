@@ -37,16 +37,21 @@ class RuleJson @Inject constructor(
         return format.encodeToString(
             RulesFile.serializer(),
             RulesFile(
+                version = VERSION,
                 triggers = all.filter { it.kind == RuleKind.Trigger }.map { it.toJsonTrigger(nameOf(it)) },
                 aliases = all.filter { it.kind == RuleKind.Alias }.map { it.toJsonAlias(nameOf(it)) },
+                gags = all.filter { it.kind == RuleKind.Gag }.map { JsonGag(nameOf(it), it.pattern, it.isRegex, it.enabled, it.group) },
+                timers = all.filter { it.kind == RuleKind.Timer }.map {
+                    JsonTimer(nameOf(it), it.pattern, it.body.orEmpty(), it.intervalMillis, it.enabled, it.group)
+                },
             ),
         )
     }
 
     /**
      * Adds the rules in [json] to worlds with the same name (the oldest if several share it). Rules for
-     * other worlds are skipped; worlds are never created. An imported alias replaces one with the same
-     * name in the same scope. Throws [IllegalArgumentException] if [json] isn't a rules file.
+     * other worlds are skipped; worlds are never created. An imported alias or timer replaces one with
+     * the same name in the same scope. Throws [IllegalArgumentException] if [json] isn't a rules file.
      */
     suspend fun import(json: String): ImportSummary {
         val file = format.decodeFromString(RulesFile.serializer(), json)
@@ -63,7 +68,9 @@ class RuleJson @Inject constructor(
         val delete = HashSet<Long>()
         val insert = ArrayList<RuleEntity>()
 
-        val incoming = file.triggers.map { it.world to it::toEntity } + file.aliases.map { it.world to it::toEntity }
+        val oldGags = file.version < 2
+        val incoming = file.triggers.map { t -> t.world to { worldId: Long?, now: Long -> t.toEntity(worldId, now, oldGags) } } + file.aliases.map { it.world to it::toEntity } +
+            file.gags.map { it.world to it::toEntity } + file.timers.map { it.world to it::toEntity }
         for ((world, toEntity) in incoming) {
             val worldId = world?.let { idByName[it] }
             if (world != null && worldId == null) {
@@ -76,9 +83,9 @@ class RuleJson @Inject constructor(
                 present++
                 continue
             }
-            if (entity.kind == RuleKind.Alias) {
+            if (entity.kind == RuleKind.Alias || entity.kind == RuleKind.Timer) {
                 fun sameName(other: RuleEntity) =
-                    other.kind == RuleKind.Alias && other.worldId == worldId && other.pattern == entity.pattern
+                    other.kind == entity.kind && other.worldId == worldId && other.pattern == entity.pattern
                 existing.filter(::sameName).mapTo(delete) { it.id }
                 insert.removeAll(::sameName)
             }
@@ -89,7 +96,8 @@ class RuleJson @Inject constructor(
     }
 
     private companion object {
-        const val VERSION = 1
+        /** 2 added gags and timers. */
+        const val VERSION = 2
         val format = Json {
             prettyPrint = true
             ignoreUnknownKeys = true
@@ -101,9 +109,12 @@ private fun RuleEntity.comparable() = copy(id = 0, createdAt = 0)
 
 @Serializable
 private data class RulesFile(
+    // Files without a version are version 1. A newer app writes its version so older ones refuse the file.
     val version: Int = 1,
     val triggers: List<JsonTrigger> = emptyList(),
     val aliases: List<JsonAlias> = emptyList(),
+    val gags: List<JsonGag> = emptyList(),
+    val timers: List<JsonTimer> = emptyList(),
 )
 
 /** Defaults match [RuleEntity] and are left out of the file. [world] is always written; null means all worlds. */
@@ -123,7 +134,13 @@ private data class JsonTrigger(
     val replyTemplate: String? = null,
     val replyRequiresUnlock: Boolean = true,
 ) {
-    fun toEntity(worldId: Long?, createdAt: Long) = RuleEntity(
+    /** Version 1 files kept gags as triggers that only gag; with [oldGags] those come in as gags. */
+    fun toEntity(worldId: Long?, createdAt: Long, oldGags: Boolean): RuleEntity {
+        val onlyGags = oldGags && gag && send == null && highlight == null && !vibrate && !notify
+        return if (onlyGags) JsonGag(world, pattern, regex, enabled, group).toEntity(worldId, createdAt) else trigger(worldId, createdAt)
+    }
+
+    private fun trigger(worldId: Long?, createdAt: Long) = RuleEntity(
         worldId = worldId,
         kind = RuleKind.Trigger,
         pattern = pattern,
@@ -157,6 +174,47 @@ private data class JsonAlias(
         body = expansion,
         enabled = enabled,
         group = group,
+        createdAt = createdAt,
+    )
+}
+
+@Serializable
+private data class JsonGag(
+    val world: String?,
+    val pattern: String,
+    val regex: Boolean = false,
+    val enabled: Boolean = true,
+    val group: String? = null,
+) {
+    fun toEntity(worldId: Long?, createdAt: Long) = RuleEntity(
+        worldId = worldId,
+        kind = RuleKind.Gag,
+        pattern = pattern,
+        body = null,
+        isRegex = regex,
+        enabled = enabled,
+        group = group,
+        createdAt = createdAt,
+    )
+}
+
+@Serializable
+private data class JsonTimer(
+    val world: String?,
+    val name: String,
+    val command: String,
+    val intervalMillis: Long,
+    val enabled: Boolean = true,
+    val group: String? = null,
+) {
+    fun toEntity(worldId: Long?, createdAt: Long) = RuleEntity(
+        worldId = worldId,
+        kind = RuleKind.Timer,
+        pattern = name,
+        body = command,
+        enabled = enabled,
+        group = group,
+        intervalMillis = intervalMillis,
         createdAt = createdAt,
     )
 }

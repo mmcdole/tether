@@ -69,8 +69,8 @@ class RulesViewModelTest {
         val vm = viewModel(thorin)
         val state = vm.state.value
         assertEquals("Thorin", state.world?.name)
-        assertEquals(2, state.triggerCount)
-        assertEquals(1, state.aliasCount)
+        assertEquals(2, state.counts[RuleTab.Triggers])
+        assertEquals(1, state.counts[RuleTab.Aliases])
         assertEquals(listOf("Highlight red · vibrate"), state.worldRows.map { it.summary })
         assertEquals(listOf("eat bread"), state.globalRows.map { it.summary })
 
@@ -86,13 +86,13 @@ class RulesViewModelTest {
 
         val vm = viewModel(null)
         assertNull(vm.state.value.world)
-        assertEquals(1, vm.state.value.triggerCount)
+        assertEquals(1, vm.state.value.counts[RuleTab.Triggers])
         assertEquals(listOf("Thorin", "Alt", "Bard"), vm.state.value.worlds.map { it.name })
 
         vm.selectWorld(alt)
         assertEquals("Alt", vm.state.value.world?.name)
         assertEquals(listOf("alt only"), vm.state.value.worldRows.map { it.title })
-        assertEquals(2, vm.state.value.triggerCount)
+        assertEquals(2, vm.state.value.counts[RuleTab.Triggers])
     }
 
     @Test
@@ -241,5 +241,33 @@ class RulesViewModelTest {
         vm.confirmDelete()
         assertNull(vm.state.value.actions)
         assertEquals(emptyList<RuleRow>(), vm.state.value.globalRows)
+    }
+
+    @Test
+    fun gagsAndTimersHaveTheirOwnTabs() = runTest(dispatcher) {
+        rules.addGag(Scope.World(thorin), "spam")
+        rules.addTimer(Scope.Global, "heal", "cast heal", 1000)
+        val vm = viewModel(thorin)
+        assertEquals(mapOf(RuleTab.Triggers to 0, RuleTab.Aliases to 0, RuleTab.Gags to 1, RuleTab.Timers to 1), vm.state.value.counts)
+
+        vm.selectTab(RuleTab.Timers)
+        assertEquals(listOf("cast heal · every 1s"), vm.state.value.globalRows.map { it.summary })
+
+        vm.add(Scope.Global)
+        vm.updateTimer { it.copy(name = "heal", command = "x", seconds = "2") }
+        assertEquals("Already used", (vm.state.value.editor as RuleEditor.EditTimer).form.nameError)
+        vm.updateTimer { it.copy(name = "save", seconds = "0.2") }
+        assertFalse((vm.state.value.editor as RuleEditor.EditTimer).form.canSave)
+        vm.updateTimer { it.copy(seconds = "2.5") }
+        vm.save()
+        assertEquals(listOf("cast heal · every 1s", "x · every 2.5s"), vm.state.value.globalRows.map { it.summary })
+
+        vm.selectTab(RuleTab.Gags)
+        vm.add(Scope.World(thorin))
+        vm.updateGag { it.copy(pattern = "^HP:(\\d+", isRegex = true) }
+        assertFalse((vm.state.value.editor as RuleEditor.EditGag).form.canSave)
+        vm.updateGag { it.copy(pattern = "^HP:\\d+") }
+        vm.save()
+        assertEquals(listOf("Hides the line", "Hides the line · regex"), vm.state.value.worldRows.map { it.summary })
     }
 }

@@ -94,4 +94,22 @@ class MigrationTest {
             assertEquals(listOf(listOf<Any?>(null)), rows("SELECT worldId FROM rules"))
         }
     }
+
+    @Test
+    fun version2GagOnlyTriggersBecomeGags() {
+        open().apply {
+            create(2)
+            val insertRule = "INSERT INTO rules (kind, pattern, body, isRegex, enabled, priority, highlight, gag, vibrate, notify, " +
+                "replyRequiresUnlock, createdAt) VALUES ('%s', '%s', %s, 0, 1, 0, NULL, %d, 0, %d, 1, 1)"
+            exec(insertRule.format("Trigger", "spam", "NULL", 1, 0))
+            exec(insertRule.format("Trigger", "tells", "NULL", 1, 1))
+            exec(insertRule.format("Trigger", "rat", "'kill rat'", 1, 0))
+            exec(insertRule.format("Alias", "k", "'kill'", 0, 0))
+            MIGRATION_2_3.forEach { exec(it) }
+            assertEquals(
+                listOf(listOf<Any?>("Gag", 0, 0), listOf<Any?>("Trigger", 1, 0), listOf<Any?>("Trigger", 1, 0), listOf<Any?>("Alias", 0, 0)),
+                rows("SELECT kind, gag, intervalMillis FROM rules ORDER BY id"),
+            )
+        }
+    }
 }

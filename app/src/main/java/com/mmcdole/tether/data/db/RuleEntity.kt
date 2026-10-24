@@ -6,9 +6,9 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-enum class RuleKind { Trigger, Alias }
+enum class RuleKind { Trigger, Alias, Gag, Timer }
 
-/** A trigger or an alias. Columns that don't apply to the [kind] keep their defaults. */
+/** A trigger, alias, gag or timer. Columns that don't apply to the [kind] keep their defaults. */
 @Entity(
     tableName = "rules",
     foreignKeys = [
@@ -21,9 +21,9 @@ data class RuleEntity(
     /** Null = all worlds. */
     val worldId: Long?,
     val kind: RuleKind,
-    /** A trigger's pattern, or an alias's name. */
+    /** A trigger's or gag's pattern, or an alias's or timer's name. */
     val pattern: String,
-    /** An alias's expansion, or the commands a trigger sends. */
+    /** An alias's expansion, or the commands a trigger or timer sends. */
     val body: String?,
     val isRegex: Boolean = false,
     val enabled: Boolean = true,
@@ -36,4 +36,6 @@ data class RuleEntity(
     val replyTemplate: String? = null,
     val replyRequiresUnlock: Boolean = true,
     val createdAt: Long,
+    /** How often a timer fires. Last, where the migration that added it put it. */
+    @ColumnInfo(defaultValue = "0") val intervalMillis: Long = 0,
 )

@@ -25,14 +25,17 @@ sealed interface Step {
     /** Remove the world gag with this pattern if there is one, otherwise the global one. */
     data class RemoveGag(val pattern: String) : Step
 
-    /** Sends [command] every [intervalMillis] while connected. Replaces a ticker with the same name. */
-    data class AddTicker(val name: String, val command: String, val intervalMillis: Long) : Step
+    /** A timer that sends [command] every [intervalMillis]. Replaces one with the same name and turns it on. */
+    data class AddTicker(val name: String, val command: String, val intervalMillis: Long, val global: Boolean) : Step
 
-    data class RemoveTicker(val name: String) : Step
+    /** Turns the world timer with this name on or off if there is one, otherwise the global one. */
+    data class SetTicker(val name: String, val on: Boolean) : Step
 
     data object ListAliases : Step
 
     data object ListTriggers : Step
+
+    data object ListGags : Step
 
     data object ListTickers : Step
 
@@ -87,18 +90,22 @@ object CommandParser {
                     else -> Step.AddAction(a[0], a[1], global = lower == "gaction")
                 }
             }
-            "gag", "ggag" -> one(rest, usage("{pattern}")) { Step.AddGag(it, global = lower == "ggag") }
-            "ticker" -> args(rest, 3) { a ->
+            "gag", "ggag" -> args(rest, 1) { a ->
+                if (a.isEmpty()) Step.ListGags else if (a[0].isEmpty()) usage("{pattern}") else Step.AddGag(a[0], global = lower == "ggag")
+            }
+            "ticker", "gticker" -> args(rest, 3) { a ->
                 val seconds = a.getOrNull(2)?.toDoubleOrNull()
+                val onOff = a.getOrNull(1)?.lowercase()
                 when {
                     a.isEmpty() -> Step.ListTickers
-                    a.size < 3 || a[0].isEmpty() || a[1].isEmpty() -> usage("{name} {command} {seconds}")
+                    a.size == 2 && (onOff == "on" || onOff == "off") && a[0].isNotEmpty() -> Step.SetTicker(a[0], onOff == "on")
+                    a.size < 3 || a[0].isEmpty() || a[1].isEmpty() -> usage("{name} {command} {seconds}, or #$name {name} on|off")
                     seconds == null || seconds < MIN_TICKER_SECONDS ->
                         Step.Error("Ticker seconds must be a number, at least $MIN_TICKER_SECONDS: ${a[2]}")
-                    else -> Step.AddTicker(a[0], a[1], (seconds * 1000).toLong())
+                    else -> Step.AddTicker(a[0], a[1], (seconds * 1000).toLong(), global = lower == "gticker")
                 }
             }
-            "unticker" -> one(rest, usage("{name}")) { Step.RemoveTicker(it) }
+            "unticker" -> one(rest, usage("{name}")) { Step.SetTicker(it, on = false) }
             "unalias" -> one(rest, usage("{name}")) { Step.RemoveAlias(it) }
             "unaction" -> one(rest, usage("{pattern}")) { Step.RemoveAction(it) }
             "ungag" -> one(rest, usage("{pattern}")) { Step.RemoveGag(it) }

@@ -112,7 +112,8 @@ class CommandParserTest {
     fun gagAndGgag() {
         assertEquals(Step.AddGag("The fountain gurgles.", global = false), one("#gag The fountain gurgles."))
         assertEquals(Step.AddGag("spam", global = true), one("#ggag {spam}"))
-        assertEquals(Step.Error("Usage: #gag {pattern}"), one("#gag"))
+        assertEquals(Step.ListGags, one("#gag"))
+        assertEquals(Step.Error("Usage: #gag {pattern}"), one("#gag {}"))
     }
 
     @Test
@@ -163,10 +164,12 @@ class CommandParserTest {
 
     @Test
     fun tickerTakesNameCommandAndSeconds() {
-        assertEquals(Step.AddTicker("heal", "cast heal;grin", 1000), one("#ticker heal {cast heal;grin} 1"))
-        assertEquals(Step.AddTicker("tk", "save", 2500), one("#ticker {tk} {save} {2.5}"))
+        assertEquals(Step.AddTicker("heal", "cast heal;grin", 1000, global = false), one("#ticker heal {cast heal;grin} 1"))
+        assertEquals(Step.AddTicker("tk", "save", 2500, global = true), one("#gticker {tk} {save} {2.5}"))
         assertEquals(Step.ListTickers, one("#ticker"))
-        assertEquals(Step.RemoveTicker("heal"), one("#unticker heal"))
+        assertEquals(Step.SetTicker("heal", on = true), one("#ticker heal on"))
+        assertEquals(Step.SetTicker("heal", on = false), one("#ticker heal OFF"))
+        assertEquals(Step.SetTicker("heal", on = false), one("#unticker heal"))
     }
 
     @Test
@@ -174,5 +177,6 @@ class CommandParserTest {
         assertIs<Step.Error>(one("#ticker heal {cast heal} 0.1"))
         assertIs<Step.Error>(one("#ticker heal {cast heal} soon"))
         assertIs<Step.Error>(one("#ticker heal {cast heal}"))
+        assertIs<Step.Error>(one("#ticker heal"))
     }
 }

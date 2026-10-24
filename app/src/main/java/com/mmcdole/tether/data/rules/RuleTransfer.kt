@@ -8,7 +8,7 @@ import java.time.Clock
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** What to do where an alias with the same name already exists. */
+/** What to do where an alias or timer with the same name already exists. */
 enum class OnConflict { Replace, Skip }
 
 data class TransferResult(
@@ -25,7 +25,7 @@ class RuleTransfer @Inject constructor(
     private val dao: RuleDao,
     private val clock: Clock,
 ) {
-    /** Destinations that already have an alias with this alias's name. Always empty for a trigger. */
+    /** Destinations that already have an alias or timer with this one's name. Always empty for a trigger or gag. */
     suspend fun conflicts(ruleId: Long, destinations: Collection<Scope>): List<Scope> {
         val rule = dao.get(ruleId) ?: return emptyList()
         return targets(rule, destinations).filter { existing(rule, it).isNotEmpty() }
@@ -66,5 +66,5 @@ class RuleTransfer @Inject constructor(
         destinations.distinct().filter { it.worldId != rule.worldId }
 
     private suspend fun existing(rule: RuleEntity, scope: Scope): List<RuleEntity> =
-        if (rule.kind == RuleKind.Alias) dao.find(scope.worldId, RuleKind.Alias, rule.pattern) else emptyList()
+        if (rule.kind == RuleKind.Alias || rule.kind == RuleKind.Timer) dao.find(scope.worldId, rule.kind, rule.pattern) else emptyList()
 }

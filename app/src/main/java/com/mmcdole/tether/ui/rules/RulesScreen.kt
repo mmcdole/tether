@@ -36,7 +36,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SecondaryTabRow
+import androidx.compose.material3.SecondaryScrollableTabRow
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -92,7 +92,7 @@ fun RulesScreen(onBack: () -> Unit, viewModel: RulesViewModel = hiltViewModel())
         },
     ) { padding ->
         if (state.loading) return@Scaffold
-        val noun = if (state.tab == RuleTab.Triggers) "triggers" else "aliases"
+        val noun = state.tab.name.lowercase()
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 24.dp),
@@ -132,7 +132,7 @@ fun RulesScreen(onBack: () -> Unit, viewModel: RulesViewModel = hiltViewModel())
     state.confirmDelete?.let { row ->
         AlertDialog(
             onDismissRequest = viewModel::cancelDelete,
-            title = { Text(if (state.actions?.tab == RuleTab.Aliases) "Delete alias?" else "Delete trigger?") },
+            title = { Text("Delete ${(state.actions?.tab ?: state.tab).noun}?") },
             text = { Text(row.title, fontFamily = MudFont, color = TetherColors.TextDim) },
             confirmButton = { TextButton(onClick = viewModel::confirmDelete) { Text("Delete", color = TetherColors.Danger) } },
             dismissButton = { TextButton(onClick = viewModel::cancelDelete) { Text("Cancel", color = TetherColors.Text) } },
@@ -187,8 +187,10 @@ private fun WorldMenuItem(name: String, current: Boolean, onClick: () -> Unit) {
 @Composable
 private fun RulesTabs(state: RulesUiState, onSelect: (RuleTab) -> Unit) {
     val selected = state.tab.ordinal
-    SecondaryTabRow(
+    // Four tabs with counts don't fit a narrow phone, so they scroll.
+    SecondaryScrollableTabRow(
         selectedTabIndex = selected,
+        edgePadding = 0.dp,
         containerColor = TetherColors.Background,
         contentColor = TetherColors.Text,
         indicator = {
@@ -197,7 +199,7 @@ private fun RulesTabs(state: RulesUiState, onSelect: (RuleTab) -> Unit) {
         divider = { HorizontalDivider(color = TetherColors.Line) },
     ) {
         RuleTab.entries.forEach { tab ->
-            val count = if (tab == RuleTab.Triggers) state.triggerCount else state.aliasCount
+            val count = state.counts[tab] ?: 0
             val on = tab == state.tab
             Tab(
                 selected = on,

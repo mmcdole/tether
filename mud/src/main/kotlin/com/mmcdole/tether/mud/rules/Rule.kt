@@ -29,6 +29,31 @@ data class Trigger(
     val replyRequiresUnlock: Boolean = true,
 )
 
+/** Hides lines that match [pattern]. */
+data class Gag(
+    val id: Long,
+    val scope: Scope,
+    val pattern: String,
+    val isRegex: Boolean = false,
+    val enabled: Boolean = true,
+    val group: String? = null,
+)
+
+/** Sends [command] every [intervalMillis] while connected and [enabled]. */
+data class Timer(
+    val id: Long,
+    val scope: Scope,
+    val name: String,
+    /** May contain `;` and aliases. */
+    val command: String,
+    val intervalMillis: Long,
+    val enabled: Boolean = true,
+    val group: String? = null,
+)
+
+/** A timer interval as `1s` or `2.5s`. */
+fun secondsText(millis: Long): String = if (millis % 1000 == 0L) "${millis / 1000}s" else "${millis / 1000.0}s"
+
 /** Replaces the first word of a command, like `k` → `kill %1`. */
 data class Alias(
     val id: Long,

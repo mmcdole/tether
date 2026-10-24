@@ -75,4 +75,22 @@ class RuleSetTest {
         assertEquals(listOf(2L), rules.triggers.map { it.trigger.id })
         assertEquals(listOf(bad), rules.invalid.map { it.trigger })
     }
+
+    @Test
+    fun gagsRunAsGagTriggersAndTimersPreferTheWorldOne() {
+        val rules = RuleSet.build(
+            1,
+            emptyList(),
+            emptyList(),
+            gags = listOf(Gag(1, world, "spam"), Gag(2, Scope.Global, "off", enabled = false)),
+            timers = listOf(
+                Timer(3, Scope.Global, "heal", "cast heal", 1000),
+                Timer(4, world, "heal", "cast big heal", 1000),
+                Timer(5, Scope.Global, "save", "save", 60_000, enabled = false),
+                Timer(6, Scope.World(2), "other", "x", 1000),
+            ),
+        )
+        assertEquals(listOf("spam"), rules.triggers.filter { it.trigger.gag }.map { it.trigger.pattern })
+        assertEquals(listOf(4L), rules.timers.map { it.id })
+    }
 }

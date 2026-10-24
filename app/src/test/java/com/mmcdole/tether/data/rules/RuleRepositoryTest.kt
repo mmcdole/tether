@@ -2,7 +2,9 @@ package com.mmcdole.tether.data.rules
 
 import app.cash.turbine.test
 import com.mmcdole.tether.mud.rules.Alias
+import com.mmcdole.tether.mud.rules.Gag
 import com.mmcdole.tether.mud.rules.Scope
+import com.mmcdole.tether.mud.rules.Timer
 import com.mmcdole.tether.mud.rules.Trigger
 import java.time.Clock
 import java.time.Instant
@@ -139,8 +141,7 @@ class RuleRepositoryTest {
         val gag = repository.addGag(thorin, "%1 arrives")
         assertTrue(gag != action)
         assertEquals(gag, repository.addGag(thorin, "%1 arrives"))
-        assertTrue(repository.getTrigger(gag)!!.gag)
-        assertNull(repository.getTrigger(gag)!!.send)
+        assertEquals(Gag(gag, thorin, "%1 arrives"), repository.getGag(gag))
         assertEquals(2, dao.rows.value.size)
     }
 
@@ -185,5 +186,29 @@ class RuleRepositoryTest {
         assertEquals(Removal.Removed(thorin), repository.removeGag(1, "tells you"))
         assertEquals(Trigger(id, thorin, "tells you", notify = true), repository.getTrigger(id))
         assertEquals(Removal.NotFound, repository.removeAction(1, "tells you"))
+    }
+
+    @Test
+    fun addTimerReplacesByNameAndTurnsOn() = runTest {
+        val id = repository.addTimer(thorin, "heal", "cast heal", 1000)
+        assertEquals(Removal.Removed(thorin), repository.setTimerEnabled(1, "heal", false))
+        assertEquals(id, repository.addTimer(thorin, "heal", "cast big heal", 2000))
+        assertEquals(Timer(id, thorin, "heal", "cast big heal", 2000), repository.getTimer(id))
+
+        val global = repository.addTimer(Scope.Global, "save", "save", 60_000)
+        assertEquals(Removal.Removed(Scope.Global), repository.setTimerEnabled(1, "save", false))
+        assertFalse(repository.getTimer(global)!!.enabled)
+        assertEquals(Removal.NotFound, repository.setTimerEnabled(1, "nope", true))
+    }
+
+    @Test
+    fun ungagRemovesGagsBeforeTakingTheGagOffTriggers() = runTest {
+        val gag = repository.addGag(thorin, "spam")
+        val trigger = repository.save(Trigger(0, thorin, "spam", gag = true, notify = true))
+        assertEquals(Removal.Removed(thorin), repository.removeGag(1, "spam"))
+        assertNull(repository.getGag(gag))
+        assertTrue(repository.getTrigger(trigger)!!.gag)
+        assertEquals(Removal.Removed(thorin), repository.removeGag(1, "spam"))
+        assertFalse(repository.getTrigger(trigger)!!.gag)
     }
 }

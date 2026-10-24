@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mmcdole.tether.mud.rules.Scope
@@ -62,6 +63,8 @@ internal fun RuleEditorSheet(editor: RuleEditor, world: WorldOption?, viewModel:
             when (editor) {
                 is RuleEditor.EditTrigger -> TriggerFields(editor.form, world, viewModel)
                 is RuleEditor.EditAlias -> AliasFields(editor.form, world, viewModel)
+                is RuleEditor.EditGag -> GagFields(editor.form, world, viewModel)
+                is RuleEditor.EditTimer -> TimerFields(editor.form, world, viewModel)
             }
         }
     }
@@ -151,6 +154,49 @@ private fun AliasFields(form: AliasForm, world: WorldOption?, viewModel: RulesVi
         placeholder = "k",
     )
     SheetField("Expansion", form.expansion, { v -> update { it.copy(expansion = v) } }, placeholder = "kill %1")
+    AppliesTo(form.scope, world) { s -> update { it.copy(scope = s) } }
+    Buttons(advanced = null, onAdvanced = {}, canSave = form.canSave, onSave = viewModel::save)
+}
+
+@Composable
+private fun GagFields(form: GagForm, world: WorldOption?, viewModel: RulesViewModel) {
+    val update = viewModel::updateGag
+    Text(if (form.isNew) "New gag" else "Edit gag", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+    SheetField(
+        "Pattern",
+        form.pattern,
+        { v -> update { it.copy(pattern = v) } },
+        error = form.patternError,
+        visualTransformation = WildcardTransformation(!form.isRegex),
+        placeholder = "The fountain gurgles.",
+    )
+    SwitchRow("Regex", form.isRegex) { v -> update { it.copy(isRegex = v) } }
+    AppliesTo(form.scope, world) { s -> update { it.copy(scope = s) } }
+    Buttons(advanced = null, onAdvanced = {}, canSave = form.canSave, onSave = viewModel::save)
+}
+
+@Composable
+private fun TimerFields(form: TimerForm, world: WorldOption?, viewModel: RulesViewModel) {
+    val update = viewModel::updateTimer
+    Text(if (form.isNew) "New timer" else "Edit timer", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+    SheetField(
+        "Name",
+        form.name,
+        { v -> update { it.copy(name = v) } },
+        error = form.nameError,
+        accept = { it.filterNot(Char::isWhitespace) },
+        placeholder = "heal",
+    )
+    SheetField("Send command", form.command, { v -> update { it.copy(command = v) } }, placeholder = "cast heal")
+    SheetField(
+        "Every (seconds)",
+        form.seconds,
+        { v -> update { it.copy(seconds = v) } },
+        error = form.secondsError,
+        keyboardType = KeyboardType.Decimal,
+        accept = { v -> v.takeIf { it.all { c -> c.isDigit() || c == '.' } } },
+        placeholder = "1",
+    )
     AppliesTo(form.scope, world) { s -> update { it.copy(scope = s) } }
     Buttons(advanced = null, onAdvanced = {}, canSave = form.canSave, onSave = viewModel::save)
 }
