@@ -17,7 +17,10 @@ import com.mmcdole.tether.mud.rules.Timer
 import com.mmcdole.tether.mud.rules.secondsText
 import com.mmcdole.tether.mud.rules.Trigger
 import com.mmcdole.tether.mud.rules.TriggerEngine
+import com.mmcdole.tether.mud.ansi.TextStyle
+import com.mmcdole.tether.mud.rules.TemplatePiece
 import com.mmcdole.tether.mud.text.LineContent
+import com.mmcdole.tether.mud.text.StyleSpan
 import com.mmcdole.tether.mud.text.LineKind
 import com.mmcdole.tether.mud.text.StyledLine
 import java.io.File
@@ -402,7 +405,7 @@ class SessionManager @Inject constructor(
             }
             if (result.isEmpty) continue
             result.chat?.let { copy ->
-                val content = copy.text?.let { LineContent(it, emptyList()) } ?: line.content.from(copy.start)
+                val content = copy.pieces?.let { line.content.fill(it) } ?: line.content.slice(copy.start, line.content.text.length)
                 val chatLine = StyledLine(nextChatId++, content.text, content.spans, highlight = result.highlight)
                 _chat.value = (_chat.value + ChatLine(chatLine, clock.instant())).takeLast(CHAT_SIZE)
             }
@@ -625,11 +628,38 @@ class SessionManager @Inject constructor(
     }
 }
 
-/** The text from [start] on, with its styles moved along. */
-private fun LineContent.from(start: Int): LineContent {
-    if (start <= 0) return this
-    val spans = spans.filter { it.end > start }.map { it.copy(start = maxOf(it.start, start) - start, end = it.end - start) }
-    return LineContent(text.substring(start), spans)
+/** The text from [start] until [end], with its styles moved along. */
+private fun LineContent.slice(start: Int, end: Int): LineContent {
+    if (start <= 0 && end >= text.length) return this
+    val spans = spans.filter { it.end > start && it.start < end }
+        .map { StyleSpan(maxOf(it.start, start) - start, minOf(it.end, end) - start, it.style) }
+    return LineContent(text.substring(start, end), spans)
+}
+
+/**
+ * A Chat text filled in from this line: captures keep their colors, and typed text takes the color
+ * the capture before it ended in.
+ */
+private fun LineContent.fill(pieces: List<TemplatePiece>): LineContent {
+    val out = StringBuilder()
+    val spans = ArrayList<StyleSpan>()
+    var carry: TextStyle? = null
+    for (piece in pieces) {
+        val start = out.length
+        when (piece) {
+            is TemplatePiece.Text -> {
+                out.append(piece.text)
+                carry?.let { spans += StyleSpan(start, out.length, it) }
+            }
+            is TemplatePiece.Capture -> {
+                val part = slice(piece.start, minOf(piece.end, text.length))
+                out.append(part.text)
+                part.spans.mapTo(spans) { it.copy(start = it.start + start, end = it.end + start) }
+                carry = part.spans.lastOrNull()?.takeIf { it.end == part.text.length }?.style
+            }
+        }
+    }
+    return LineContent(out.toString(), spans)
 }
 
 /** A line a Chat trigger copied to the chat tray, and when it came in. */

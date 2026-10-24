@@ -135,6 +135,7 @@ class TriggerEngineTest {
         val tell = Trigger(1, Scope.Global, "(\\w+) tells you: (.*)", isRegex = true, chat = true, chatText = "%1: %2")
         val other = Trigger(2, Scope.Global, "tells", chat = true)
         val result = run("HP: 346 Storgrim tells you: Certainly", tell, other)
-        assertEquals(ChatCopy(8, "Storgrim: Certainly"), result.chat)
+        val pieces = listOf(TemplatePiece.Capture(8, 16), TemplatePiece.Text(": "), TemplatePiece.Capture(28, 37))
+        assertEquals(ChatCopy(8, pieces), result.chat)
     }
 }

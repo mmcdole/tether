@@ -12,8 +12,8 @@ data class NotifyRequest(
     val replyRequiresUnlock: Boolean,
 )
 
-/** What a Chat trigger puts in the chat tray: the line from [start] on, or [text] when it has a Chat text. */
-data class ChatCopy(val start: Int, val text: String? = null)
+/** What a Chat trigger puts in the chat tray: the line from [start] on, or [pieces] when it has a Chat text. */
+data class ChatCopy(val start: Int, val pieces: List<TemplatePiece>? = null)
 
 /** Everything the matching triggers want done with one line. */
 data class TriggerResult(
@@ -56,7 +56,7 @@ object TriggerEngine {
             val captures = match.captures
             val t = compiled.trigger
             if (t.gag) gag = true
-            if (t.chat && chat == null) chat = ChatCopy(match.start, t.chatText?.let { expand(it, captures) })
+            if (t.chat && chat == null) chat = ChatCopy(match.start, t.chatText?.let { expandPieces(it, match.ranges) })
             if (highlight == null) highlight = t.highlight
             if (t.vibrate) vibrate = true
             // Split before expanding so a `;` in the MUD's text can't become a second command.

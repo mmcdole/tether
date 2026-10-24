@@ -143,4 +143,13 @@ class PatternTest {
         assertEquals(false, usesCaptures("say 100%%1"))
         assertEquals(false, usesCaptures("kill"))
     }
+
+    @Test
+    fun expandPiecesKeepsCapturePositions() {
+        val ranges = listOf(0..9, 0..2, null)
+        assertEquals(
+            listOf(TemplatePiece.Text("<"), TemplatePiece.Capture(0, 3), TemplatePiece.Text("> 100% ")),
+            expandPieces("<%1> 100%% %2", ranges),
+        )
+    }
 }

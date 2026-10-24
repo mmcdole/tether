@@ -377,6 +377,19 @@ class SessionManagerTest {
     }
 
     @Test
+    fun chatTextKeepsTheCapturesColors() = runBlocking<Unit> {
+        rules.save(Trigger(0, thisWorld, "(\\w+) tells you: (.*)", isRegex = true, chat = true, chatText = "%1: %2"))
+        val manager = manager().connected()
+        // Name in red, message in green, as some MUDs color tells.
+        server.send("HP: 346 \u001b[31mSoblak\u001b[0m tells you: \u001b[32mok then\u001b[0m\r\n")
+        val line = withTimeout(2_000) { manager.chat.first { it.isNotEmpty() } }.single().line
+        assertEquals("Soblak: ok then", line.text)
+        // ": " takes the red the name ended in.
+        assertEquals(listOf(0 to 6, 6 to 8, 8 to 15), line.spans.map { it.start to it.end })
+        assertEquals(line.spans[0].style, line.spans[1].style)
+    }
+
+    @Test
     fun gagDropsTheLine() = runBlocking<Unit> {
         rules.save(Trigger(0, thisWorld, "The fountain gurgles.", gag = true))
         val manager = manager().connected()

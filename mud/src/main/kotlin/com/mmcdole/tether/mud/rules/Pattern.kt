@@ -2,8 +2,11 @@ package com.mmcdole.tether.mud.rules
 
 import java.util.regex.PatternSyntaxException
 
-/** Where a pattern matched, and its captures with the whole match as `%0`. */
-class PatternMatch(val start: Int, val captures: List<String>)
+/**
+ * Where a pattern matched, and its captures with the whole match as `%0`. [ranges] has where each
+ * capture is in the text, null for one that matched nothing.
+ */
+class PatternMatch(val start: Int, val captures: List<String>, val ranges: List<IntRange?>)
 
 sealed interface PatternResult {
     data class Valid(val pattern: Pattern) : PatternResult
@@ -29,11 +32,12 @@ class Pattern private constructor(
     /** Like [match], plus where in [text] the match starts. */
     fun find(text: String): PatternMatch? {
         val m = regex.find(text) ?: return null
-        val groups = wildcardGroups ?: return PatternMatch(m.range.first, m.groupValues)
+        val groups = wildcardGroups ?: return PatternMatch(m.range.first, m.groupValues, m.groups.map { it?.range })
         val captures = List(groups.size) { n ->
             if (n == 0) m.value else if (groups[n] == 0) "" else m.groupValues[groups[n]]
         }
-        return PatternMatch(m.range.first, captures)
+        val ranges = List(groups.size) { n -> if (n == 0) m.range else if (groups[n] == 0) null else m.groups[groups[n]]?.range }
+        return PatternMatch(m.range.first, captures, ranges)
     }
 
     override fun toString() = source
@@ -129,6 +133,43 @@ fun expand(template: String, captures: List<String>): String {
         i++
     }
     return out.toString()
+}
+
+/** Part of a filled-in template: typed text, or a capture by where it is in the line. */
+sealed interface TemplatePiece {
+    data class Text(val text: String) : TemplatePiece
+
+    /** Characters [start] until [end] of the line. */
+    data class Capture(val start: Int, val end: Int) : TemplatePiece
+}
+
+/** Like [expand], but keeps each capture as its place in the line, so its colors can come along. */
+fun expandPieces(template: String, ranges: List<IntRange?>): List<TemplatePiece> {
+    val pieces = ArrayList<TemplatePiece>()
+    val text = StringBuilder()
+    fun flush() {
+        if (text.isNotEmpty()) pieces += TemplatePiece.Text(text.toString())
+        text.setLength(0)
+    }
+    var i = 0
+    while (i < template.length) {
+        val c = template[i]
+        val next = template.getOrNull(i + 1)
+        when {
+            c == '%' && next == '%' -> { text.append('%'); i++ }
+            c == '%' && next != null && next in '0'..'9' -> {
+                ranges.getOrNull(next - '0')?.takeIf { !it.isEmpty() }?.let {
+                    flush()
+                    pieces += TemplatePiece.Capture(it.first, it.last + 1)
+                }
+                i++
+            }
+            else -> text.append(c)
+        }
+        i++
+    }
+    flush()
+    return pieces
 }
 
 /** True if [template] uses any of `%0`–`%9`. */
